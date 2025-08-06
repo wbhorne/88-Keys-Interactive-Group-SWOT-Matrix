@@ -115,21 +115,46 @@
     
         // ------------------------------------------------------------------------------------------------
         // Initialize Firebase app with the config provided by the environment.
-        // This is a more robust way to handle the config string or object.
+        // This version is much more robust and includes a fallback configuration
+        // to prevent crashes and provide clear error messages if the config is missing.
         // ------------------------------------------------------------------------------------------------
         let firebaseConfig = {};
-        if (typeof __firebase_config === 'string') {
-            try {
+        try {
+            // Check if the environment variable is a string and not empty.
+            if (typeof __firebase_config === 'string' && __firebase_config.length > 0) {
                 firebaseConfig = JSON.parse(__firebase_config);
-            } catch (e) {
-                console.error("Failed to parse __firebase_config string:", e);
-                // Default to an empty object to prevent a crash, although Firebase init will fail.
-                firebaseConfig = {};
+                console.log("Firebase config loaded successfully from environment variable.");
+            // Check if the environment variable is a non-null object.
+            } else if (typeof __firebase_config === 'object' && __firebase_config !== null) {
+                firebaseConfig = __firebase_config;
+                console.log("Firebase config loaded successfully from environment object.");
+            // If neither of the above, log an error and use a fallback.
+            } else {
+                console.error("The '__firebase_config' environment variable is missing or empty. Using a hardcoded fallback config.");
+                // This fallback will prevent the app from crashing but will not connect to Firebase.
+                // The "Connection Failed" status will be displayed.
+                firebaseConfig = {
+                    apiKey: "dummy-key",
+                    authDomain: "dummy-domain.firebaseapp.com",
+                    projectId: "dummy-project-id",
+                    storageBucket: "dummy-bucket.appspot.com",
+                    messagingSenderId: "dummy-sender-id",
+                    appId: "dummy-app-id"
+                };
             }
-        } else if (typeof __firebase_config === 'object' && __firebase_config !== null) {
-            firebaseConfig = __firebase_config;
+        } catch (e) {
+            console.error("Error parsing '__firebase_config'. Using a hardcoded fallback config.", e);
+            // This fallback will handle cases where the config string is malformed.
+            firebaseConfig = {
+                apiKey: "dummy-key",
+                authDomain: "dummy-domain.firebaseapp.com",
+                projectId: "dummy-project-id",
+                storageBucket: "dummy-bucket.appspot.com",
+                messagingSenderId: "dummy-sender-id",
+                appId: "dummy-app-id"
+            };
         }
-
+        
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
         // --- DOM Elements ---
@@ -335,7 +360,7 @@
         // --- Firebase Functions ---
         async function initializeFirebase() {
             try {
-                // Initialize Firebase app and services.
+                // Initialize Firebase app and services with the (potentially fallback) config.
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
