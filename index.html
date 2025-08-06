@@ -117,6 +117,7 @@
         // Initialize Firebase app with the config provided by the environment.
         // It's important that this is correct for the app to function.
         // ------------------------------------------------------------------------------------------------
+        // This is a crucial line. We ensure we get a valid Firebase config object.
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
