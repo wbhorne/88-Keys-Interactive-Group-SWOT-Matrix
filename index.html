@@ -115,10 +115,21 @@
     
         // ------------------------------------------------------------------------------------------------
         // Initialize Firebase app with the config provided by the environment.
-        // It's important that this is correct for the app to function.
+        // This is a more robust way to handle the config string or object.
         // ------------------------------------------------------------------------------------------------
-        // This is a crucial line. We ensure we get a valid Firebase config object.
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        let firebaseConfig = {};
+        if (typeof __firebase_config === 'string') {
+            try {
+                firebaseConfig = JSON.parse(__firebase_config);
+            } catch (e) {
+                console.error("Failed to parse __firebase_config string:", e);
+                // Default to an empty object to prevent a crash, although Firebase init will fail.
+                firebaseConfig = {};
+            }
+        } else if (typeof __firebase_config === 'object' && __firebase_config !== null) {
+            firebaseConfig = __firebase_config;
+        }
+
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
         // --- DOM Elements ---
