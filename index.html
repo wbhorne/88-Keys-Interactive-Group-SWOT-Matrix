@@ -114,45 +114,18 @@
         import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
     
         // ------------------------------------------------------------------------------------------------
-        // Initialize Firebase app with the config provided by the environment.
-        // This version is robust and includes a fallback to prevent crashes if the config is missing.
+        // Hardcoded Firebase configuration object to bypass environment variable issues.
+        // If this works, the problem is with how the environment variable is being set.
         // ------------------------------------------------------------------------------------------------
-        let firebaseConfig = {};
-        try {
-            // Check if the environment variable is a string and not empty.
-            if (typeof __firebase_config === 'string' && __firebase_config.length > 0) {
-                firebaseConfig = JSON.parse(__firebase_config);
-                console.log("Firebase config loaded successfully from environment variable.");
-            // Check if the environment variable is a non-null object.
-            } else if (typeof __firebase_config === 'object' && __firebase_config !== null) {
-                firebaseConfig = __firebase_config;
-                console.log("Firebase config loaded successfully from environment object.");
-            // If neither of the above, log an error and use a fallback.
-            } else {
-                console.error("The '__firebase_config' environment variable is missing or empty. Using a hardcoded fallback config.");
-                // This fallback will prevent the app from crashing but will not connect to Firebase.
-                // The "Connection Failed" status will be displayed.
-                firebaseConfig = {
-                    apiKey: "dummy-key",
-                    authDomain: "dummy-domain.firebaseapp.com",
-                    projectId: "dummy-project-id",
-                    storageBucket: "dummy-bucket.appspot.com",
-                    messagingSenderId: "dummy-sender-id",
-                    appId: "dummy-app-id"
-                };
-            }
-        } catch (e) {
-            console.error("Error parsing '__firebase_config'. Using a hardcoded fallback config.", e);
-            // This fallback will handle cases where the config string is malformed.
-            firebaseConfig = {
-                apiKey: "dummy-key",
-                authDomain: "dummy-domain.firebaseapp.com",
-                projectId: "dummy-project-id",
-                storageBucket: "dummy-bucket.appspot.com",
-                messagingSenderId: "dummy-sender-id",
-                appId: "dummy-app-id"
-            };
-        }
+        const firebaseConfig = {
+            apiKey: "AIzaSyB9_qveikzSy4KU9ZF9GSuWIXZFaSczep8",
+            authDomain: "keys-swot-matrix-ranking.firebaseapp.com",
+            projectId: "keys-swot-matrix-ranking",
+            storageBucket: "keys-swot-matrix-ranking.firebasestorage.app",
+            messagingSenderId: "865452112588",
+            appId: "1:865452112588:web:f3e322c113cc7444e1a069",
+            measurementId: "G-0PFJPY6D10"
+        };
         
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
@@ -359,7 +332,7 @@
         // --- Firebase Functions ---
         async function initializeFirebase() {
             try {
-                // Initialize Firebase app and services with the (potentially fallback) config.
+                // Initialize Firebase app and services with the (hardcoded) config.
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
