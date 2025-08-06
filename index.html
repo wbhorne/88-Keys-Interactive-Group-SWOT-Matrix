@@ -114,17 +114,10 @@
         import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
     
         // ------------------------------------------------------------------------------------------------
-        // Your project's Firebase configuration has been inserted below.
+        // Initialize Firebase app with the config provided by the environment.
         // It's important that this is correct for the app to function.
         // ------------------------------------------------------------------------------------------------
-        const firebaseConfig = {
-          apiKey: "AIzaSyB9_qveikzSy4KU9ZF9GSuWIXZFaSczep8",
-          authDomain: "keys-swot-matrix-ranking.firebaseapp.com",
-          projectId: "keys-swot-matrix-ranking",
-          storageBucket: "keys-swot-matrix-ranking.firebasestorage.app",
-          messagingSenderId: "865452112588",
-          appId: "1:865452112588:web:f3e322c113cc7444e1a069"
-        };
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
         // --- DOM Elements ---
@@ -338,8 +331,9 @@
                 // Attempt to sign in with the provided custom token first.
                 // If it fails, catch the error and fall back to anonymous sign-in.
                 try {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await signInWithCustomToken(auth, __initial_auth_token);
+                    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                    if (initialAuthToken) {
+                        await signInWithCustomToken(auth, initialAuthToken);
                     } else {
                         // If no custom token is available, sign in anonymously.
                         await signInAnonymously(auth);
