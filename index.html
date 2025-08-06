@@ -3,772 +3,509 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Group Ranking Model</title>
+    <title>Collaborative Ranking Model</title>
+    <!-- Use Tailwind CSS from CDN for simplicity -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body {
             font-family: 'Inter', sans-serif;
-            background-color: #f0f4f8;
-            display: flex;
-            justify-content: center;
-            align-items: flex-start; /* Align to top to allow scrolling */
-            min-height: 100vh;
-            padding: 2rem;
-            box-sizing: border-box;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            background-color: #f3f4f6;
         }
-        .container {
-            background-color: #ffffff;
-            border-radius: 1rem;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
-            padding: 2rem;
-            width: 100%;
-            max-width: 900px;
-            display: flex;
-            flex-direction: column;
-            gap: 2rem;
-        }
-        .section-title {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: #2d3748;
-            margin-bottom: 1rem;
-        }
-        .input-group label {
-            font-weight: 600;
-            color: #4a5568;
-            margin-bottom: 0.5rem;
-            display: block;
-        }
-        .input-group select, .input-group input[type="text"], .input-group textarea {
-            width: 100%;
-            padding: 0.75rem;
-            border: 1px solid #cbd5e0;
-            border-radius: 0.5rem;
-            font-size: 1rem;
-            color: #2d3748;
-            background-color: #edf2f7;
-        }
-        .btn-primary {
-            background-color: #4c51bf;
-            color: white;
-            padding: 0.75rem 1.5rem;
-            border-radius: 0.75rem;
-            font-weight: 600;
-            transition: background-color 0.3s ease, transform 0.1s ease;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            border: none;
-            cursor: pointer;
-            display: inline-block;
-        }
-        .btn-primary:hover {
-            background-color: #5a61d6;
-            transform: translateY(-1px);
-        }
-        .btn-primary:active {
-            transform: translateY(0);
-            box-shadow: none;
-        }
-        .table-container {
-            overflow-x: auto;
-        }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-        th, td {
-            padding: 0.75rem;
-            text-align: left;
-            border-bottom: 1px solid #e2e8f0;
-        }
-        th {
-            background-color: #ebf4ff;
-            color: #2d3748;
-            font-weight: 700;
-            text-transform: uppercase;
-            font-size: 0.875rem;
-        }
-        tr:last-child td {
-            border-bottom: none;
-        }
-        tr:hover {
-            background-color: #f7fafc;
-        }
-        .message-box {
-            background-color: #fff;
-            border: 1px solid #cbd5e0;
-            border-radius: 0.5rem;
-            padding: 1rem;
-            margin-bottom: 1rem;
-            text-align: center;
-            font-weight: 600;
-            color: #2d3748;
-            display: none; /* Hidden by default */
-        }
-        .message-box.show {
-            display: block;
-        }
-        .loading-overlay {
+        .message-modal {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(255, 255, 255, 0.8);
+            background-color: rgba(0, 0, 0, 0.5);
             display: flex;
             justify-content: center;
             align-items: center;
-            z-index: 1000;
-            font-size: 1.5rem;
-            font-weight: bold;
-            color: #4c51bf;
-            display: none; /* Hidden by default */
+            z-index: 100;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.3s ease;
         }
-        .loading-overlay.show {
-            display: flex;
+        .message-modal.show {
+            opacity: 1;
+            visibility: visible;
+        }
+        .message-box {
+            background-color: white;
+            padding: 1.5rem;
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+            max-width: 90%;
+            width: 400px;
+        }
+        .ranking-button {
+            transition: all 0.2s ease;
+        }
+        .ranking-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
     </style>
-    <!-- Firebase SDKs -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, addDoc, onSnapshot, collection, query, where, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Global variables for Firebase instances
-        window.firebaseApp = null;
-        window.db = null;
-        window.auth = null;
-        window.currentUserId = null;
-        window.isAuthReady = false; // Flag to indicate auth state is determined
-
-        // Provided by the Canvas environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        /**
-         * Initializes Firebase and sets up authentication.
-         */
-        async function initializeFirebase() {
-            try {
-                window.firebaseApp = initializeApp(firebaseConfig);
-                window.db = getFirestore(window.firebaseApp);
-                window.auth = getAuth(window.firebaseApp);
-
-                // Use a Promise to ensure auth state is resolved before proceeding
-                return new Promise((resolve, reject) => {
-                    const unsubscribe = onAuthStateChanged(window.auth, async (user) => {
-                        if (user) {
-                            window.currentUserId = user.uid;
-                            document.getElementById('userIdDisplay').textContent = `Your User ID: ${window.currentUserId}`;
-                            window.isAuthReady = true;
-                            console.log("Firebase Auth Ready. User ID:", window.currentUserId);
-                            setupFirestoreListeners(); // Setup listeners once authenticated
-                            unsubscribe(); // Stop listening after first auth state is determined
-                            resolve(); // Resolve the promise
-                        } else {
-                            // Only attempt sign-in if not already authenticated
-                            if (!window.currentUserId) { // Prevent re-signing in if user somehow becomes null temporarily
-                                try {
-                                    if (initialAuthToken) {
-                                        await signInWithCustomToken(window.auth, initialAuthToken);
-                                    } else {
-                                        await signInAnonymously(window.auth);
-                                    }
-                                    console.log("Attempting anonymous sign-in or custom token sign-in...");
-                                } catch (signInError) {
-                                    console.error("Error during sign-in:", signInError);
-                                    reject(signInError); // Reject if sign-in fails
-                                }
-                            }
-                        }
-                    }, (authError) => {
-                        console.error("Error in onAuthStateChanged:", authError);
-                        reject(authError); // Reject if auth state listener itself errors
-                    });
-                });
-
-            } catch (error) {
-                console.error("Error initializing Firebase app:", error);
-                showMessage("Failed to initialize the application. Please try again later.", 5000);
-                window.toggleLoading(false); // Hide loading on immediate initialization error
-                throw error; // Re-throw to propagate the error
-            }
-        }
-
-        /**
-         * Sets up real-time listeners for options and submissions from Firestore.
-         */
-        function setupFirestoreListeners() {
-            if (!window.db || !window.isAuthReady) {
-                console.warn("Firestore not ready for listeners.");
-                return;
-            }
-
-            let initialOptionsLoaded = false;
-            let initialSubmissionsLoaded = false;
-
-            const checkAllInitialLoaded = () => {
-                if (initialOptionsLoaded && initialSubmissionsLoaded) {
-                    window.toggleLoading(false); // Hide loading overlay only after both initial data sets are loaded
-                }
-            };
-
-            // Reference to the options document
-            const optionsDocRef = doc(window.db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
-
-            // Listen for real-time updates to options
-            onSnapshot(optionsDocRef, (docSnap) => {
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    const newOptions = data.options || [];
-                    if (JSON.stringify(newOptions) !== JSON.stringify(window.OPTIONS)) {
-                        window.OPTIONS = newOptions;
-                        console.log("Options updated from Firestore:", window.OPTIONS);
-                        window.renderOptionInputFields();
-                        window.initializeRankingInputs();
-                        window.renderGroupRanking();
-                        window.renderAllSubmissions();
-                    }
-                } else {
-                    window.OPTIONS = [];
-                    window.renderOptionInputFields();
-                    window.initializeRankingInputs();
-                    window.renderGroupRanking();
-                    window.renderAllSubmissions();
-                    console.log("No options document found in Firestore. Initializing empty.");
-                }
-                initialOptionsLoaded = true;
-                checkAllInitialLoaded();
-            }, (error) => {
-                console.error("Error listening to options:", error);
-                showMessage("Failed to load options in real-time.", 5000);
-                initialOptionsLoaded = true; // Mark as loaded even on error to unblock loading overlay
-                checkAllInitialLoaded();
-            });
-
-            // Reference to the submissions collection
-            const submissionsColRef = collection(window.db, `artifacts/${appId}/public/data/ranking_submissions`);
-
-            // Listen for real-time updates to submissions
-            onSnapshot(submissionsColRef, (snapshot) => {
-                const newSubmissions = [];
-                snapshot.forEach(doc => {
-                    newSubmissions.push({ id: doc.id, ...doc.data() });
-                });
-                if (JSON.stringify(newSubmissions) !== JSON.stringify(window.allSubmissions)) {
-                    window.allSubmissions = newSubmissions;
-                    console.log("Submissions updated from Firestore:", window.allSubmissions);
-                    window.renderGroupRanking();
-                    window.renderAllSubmissions();
-                }
-                initialSubmissionsLoaded = true;
-                checkAllInitialLoaded();
-            }, (error) => {
-                console.error("Error listening to submissions:", error);
-                showMessage("Failed to load submissions in real-time.", 5000);
-                initialSubmissionsLoaded = true; // Mark as loaded even on error to unblock loading overlay
-                checkAllInitialLoaded();
-            });
-        }
-
-        // Expose functions to the global scope for access from the main script
-        window.appId = appId; // Make appId available globally
-        window.initializeFirebase = initializeFirebase;
-        window.db = db; // This will be null initially, but updated by initializeFirebase
-        window.auth = auth; // This will be null initially, but updated by initializeFirebase
-        window.currentUserId = currentUserId; // This will be null initially, but updated by initializeFirebase
-        window.isAuthReady = isAuthReady; // This will be false initially, but updated by initializeFirebase
-    </script>
 </head>
-<body>
-    <div class="loading-overlay" id="loadingOverlay">Loading...</div>
+<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
 
-    <div class="container">
-        <h1 class="text-3xl font-bold text-center text-gray-800 mb-4">Interactive Group Ranking Model</h1>
-        <p id="userIdDisplay" class="text-sm text-center text-gray-600 mb-4">Your User ID: Loading...</p>
+    <!-- Main Container -->
+    <div class="w-full max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 space-y-8">
+        <h1 class="text-3xl md:text-4xl font-bold text-center text-gray-800">Collaborative Group Ranking</h1>
 
-        <!-- Message Box for user feedback -->
-        <div id="messageBox" class="message-box"></div>
+        <!-- User ID & Status -->
+        <div class="text-center text-gray-600 space-y-2">
+            <p>Your User ID: <span id="userId" class="font-semibold text-blue-600">Loading...</span></p>
+            <p>App Status: <span id="status" class="font-semibold text-gray-500">Connecting to database...</span></p>
+        </div>
 
-        <!-- Define Options Section -->
-        <div class="p-6 bg-yellow-50 rounded-lg shadow-inner">
-            <div class="section-title">Define Ranking Options</div>
-            <div id="optionsInputFields" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                <!-- Option input fields will be dynamically inserted here -->
+        <!-- Options Section -->
+        <div id="options-section" class="space-y-4">
+            <h2 class="text-2xl font-semibold text-gray-700">Define Ranking Options</h2>
+            <div class="flex flex-col md:flex-row md:space-x-4 space-y-2 md:space-y-0">
+                <input type="text" id="optionInput" class="flex-grow p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter an option (e.g., 'Team A', 'Idea 2')">
+                <button id="addOptionBtn" class="ranking-button bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700">Add Option</button>
             </div>
-            <div class="flex gap-4">
-                <button id="setOptionsBtn" class="btn-primary bg-yellow-600 hover:bg-yellow-700">Set Options</button>
-                <button id="clearOptionsBtn" class="btn-primary bg-red-600 hover:bg-red-700">Clear All Options</button>
+            <div class="mt-4 p-4 border-2 border-dashed border-gray-300 rounded-lg">
+                <ul id="optionsList" class="space-y-2">
+                    <!-- Options will be dynamically added here -->
+                </ul>
+                <div id="noOptionsMessage" class="text-gray-400 text-center">No options defined yet. Add some to get started!</div>
+            </div>
+            <div class="flex flex-col md:flex-row md:space-x-4 space-y-2 md:space-y-0">
+                <button id="clearAllBtn" class="ranking-button bg-red-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-red-700 w-full md:w-auto">Clear All Options</button>
             </div>
         </div>
 
-        <!-- Participant Input Section -->
-        <div class="p-6 bg-blue-50 rounded-lg shadow-inner">
-            <div class="section-title">Submit Your Ranks</div>
-            <div class="input-group mb-4">
-                <label for="participantName">Your Name:</label>
-                <input type="text" id="participantName" placeholder="Enter your name" class="rounded-md focus:ring-blue-500 focus:border-blue-500">
+        <!-- Ranking and Submission Section -->
+        <div id="ranking-section" class="space-y-4 hidden">
+            <h2 class="text-2xl font-semibold text-gray-700">Your Rankings</h2>
+            <div id="draggable-container" class="space-y-2 p-4 bg-gray-50 border-2 border-gray-300 rounded-lg">
+                <!-- Draggable items will be dynamically added here -->
             </div>
-            <div id="rankingInputs" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
-                <!-- Ranking dropdowns will be dynamically inserted here -->
-            </div>
-            <button id="submitRanksBtn" class="btn-primary">Submit Ranks</button>
+            <button id="submitBtn" class="ranking-button bg-green-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-green-700 w-full">Submit My Ranking</button>
         </div>
 
-        <!-- Group Ranking Results Section -->
-        <div class="p-6 bg-green-50 rounded-lg shadow-inner">
-            <div class="section-title">Group Ranking Results</div>
-            <div class="table-container">
-                <table id="resultsTable">
-                    <thead>
-                        <tr>
-                            <th>Overall Rank</th>
-                            <th>Option</th>
-                            <th>Total Score</th>
-                            <th>Average Score</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Results will be dynamically inserted here -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- All Participants' Submissions (for transparency) -->
-        <div class="p-6 bg-purple-50 rounded-lg shadow-inner">
-            <div class="section-title">All Participant Submissions</div>
-            <div class="table-container">
-                <table id="submissionsTable">
-                    <thead>
-                        <tr>
-                            <th>Participant</th>
-                            <!-- Option headers will be dynamically inserted here -->
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <!-- Submissions will be dynamically inserted here -->
-                    </tbody>
-                </table>
+        <!-- Results Section -->
+        <div id="results-section" class="space-y-4 hidden">
+            <h2 class="text-2xl font-semibold text-gray-700">Group Results</h2>
+            <div id="resultsTable" class="bg-gray-50 p-4 rounded-lg shadow-inner">
+                <p class="text-gray-500 text-center">Awaiting submissions...</p>
             </div>
         </div>
     </div>
 
+    <!-- Message Modal (replaces alert/confirm) -->
+    <div id="messageModal" class="message-modal">
+        <div class="message-box">
+            <div id="messageContent" class="text-gray-800 text-lg mb-4"></div>
+            <button id="messageCloseBtn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded-lg hover:bg-blue-700">Close</button>
+        </div>
+    </div>
+
+    <!-- Firebase SDK Imports -->
     <script type="module">
-        import { doc, setDoc, addDoc, collection, query, where, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // Define the options to be ranked - now dynamic and managed by Firestore
-        window.OPTIONS = [];
-        const MAX_OPTIONS = 15; // Maximum number of option input fields
-
-        // Data storage for submissions - now managed by Firestore
-        window.allSubmissions = [];
-
-        // HTML elements
-        const loadingOverlay = document.getElementById('loadingOverlay');
-        const optionsInputFieldsDiv = document.getElementById('optionsInputFields');
-        const setOptionsBtn = document.getElementById('setOptionsBtn');
-        const clearOptionsBtn = document.getElementById('clearOptionsBtn');
-        const participantNameInput = document.getElementById('participantName');
-        const rankingInputsDiv = document.getElementById('rankingInputs');
-        const submitRanksBtn = document.getElementById('submitRanksBtn');
-        const resultsTableBody = document.querySelector('#resultsTable tbody');
-        const submissionsTableHead = document.querySelector('#submissionsTable thead tr');
-        const submissionsTableBody = document.querySelector('#submissionsTable tbody');
-        const messageBox = document.getElementById('messageBox');
-
-        /**
-         * Displays a message in the message box.
-         * @param {string} message - The message to display.
-         * @param {number} duration - How long to display the message in milliseconds.
-         */
-        function showMessage(message, duration = 3000) {
-            messageBox.textContent = message;
-            messageBox.classList.add('show');
-            setTimeout(() => {
-                messageBox.classList.remove('show');
-            }, duration);
+        // Firebase SDK imports
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    
+        // Global variables provided by the Canvas environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+    
+        // --- DOM Elements ---
+        const userIdEl = document.getElementById('userId');
+        const statusEl = document.getElementById('status');
+        const optionsSection = document.getElementById('options-section');
+        const rankingSection = document.getElementById('ranking-section');
+        const resultsSection = document.getElementById('results-section');
+        const optionsList = document.getElementById('optionsList');
+        const optionInput = document.getElementById('optionInput');
+        const addOptionBtn = document.getElementById('addOptionBtn');
+        const clearAllBtn = document.getElementById('clearAllBtn');
+        const draggableContainer = document.getElementById('draggable-container');
+        const submitBtn = document.getElementById('submitBtn');
+        const resultsTable = document.getElementById('resultsTable');
+        const noOptionsMessage = document.getElementById('noOptionsMessage');
+        const messageModal = document.getElementById('messageModal');
+        const messageContent = document.getElementById('messageContent');
+        const messageCloseBtn = document.getElementById('messageCloseBtn');
+    
+        // --- Global State ---
+        let app = null;
+        let auth = null;
+        let db = null;
+        let userId = null;
+        let currentOptions = [];
+        let allSubmissions = {};
+        
+        // --- Helper Functions ---
+    
+        // Custom modal function to display messages to the user.
+        // This replaces alert() and confirm() as they are not available in the Canvas environment.
+        function showMessage(title, message) {
+            const modalTitle = document.getElementById('messageModalTitle');
+            if (modalTitle) modalTitle.textContent = title;
+            messageContent.textContent = message;
+            messageModal.classList.add('show');
         }
-
-        /**
-         * Shows or hides the loading overlay.
-         * @param {boolean} show - True to show, false to hide.
-         */
-        window.toggleLoading = function(show) { // Made toggleLoading global
-            if (show) {
-                loadingOverlay.classList.add('show');
+    
+        messageCloseBtn.addEventListener('click', () => {
+            messageModal.classList.remove('show');
+        });
+    
+        // Function to create a draggable list item
+        function createDraggableItem(option) {
+            const li = document.createElement('li');
+            li.draggable = true;
+            li.dataset.option = option;
+            li.className = 'draggable-item p-3 bg-white rounded-lg shadow-sm cursor-move flex items-center justify-between text-gray-700 hover:bg-gray-100 transition-colors duration-200 ease-in-out';
+            li.innerHTML = `
+                <span>${option}</span>
+                <span class="text-gray-400 text-sm">Drag to reorder</span>
+            `;
+            return li;
+        }
+    
+        // Function to render the draggable ranking list
+        function renderDraggableList() {
+            draggableContainer.innerHTML = '';
+            if (currentOptions.length === 0) {
+                draggableContainer.innerHTML = '<p class="text-gray-500 text-center">No options available to rank.</p>';
+                return;
+            }
+            currentOptions.forEach(option => {
+                const item = createDraggableItem(option);
+                draggableContainer.appendChild(item);
+            });
+    
+            // Add drag and drop event listeners
+            let dragSrcEl = null;
+            draggableContainer.querySelectorAll('.draggable-item').forEach(item => {
+                item.addEventListener('dragstart', (e) => {
+                    e.target.classList.add('opacity-40');
+                    dragSrcEl = e.target;
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/html', e.target.innerHTML);
+                });
+    
+                item.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                });
+    
+                item.addEventListener('dragenter', (e) => {
+                    e.target.classList.add('bg-gray-200');
+                });
+    
+                item.addEventListener('dragleave', (e) => {
+                    e.target.classList.remove('bg-gray-200');
+                });
+    
+                item.addEventListener('drop', (e) => {
+                    e.stopPropagation();
+                    if (dragSrcEl !== e.target) {
+                        const targetItem = e.target.closest('.draggable-item');
+                        if (targetItem) {
+                            const newIndex = Array.from(draggableContainer.children).indexOf(targetItem);
+                            const oldIndex = Array.from(draggableContainer.children).indexOf(dragSrcEl);
+                            const temp = currentOptions[newIndex];
+                            currentOptions[newIndex] = currentOptions[oldIndex];
+                            currentOptions[oldIndex] = temp;
+                            renderDraggableList(); // Re-render to reflect the change
+                        }
+                    }
+                    e.target.classList.remove('bg-gray-200');
+                });
+    
+                item.addEventListener('dragend', (e) => {
+                    e.target.classList.remove('opacity-40');
+                    draggableContainer.querySelectorAll('.draggable-item').forEach(el => el.classList.remove('bg-gray-200'));
+                });
+            });
+        }
+    
+        // Function to render the options list for the administrator
+        function renderOptionsList(options) {
+            optionsList.innerHTML = '';
+            if (options.length === 0) {
+                noOptionsMessage.classList.remove('hidden');
             } else {
-                loadingOverlay.classList.remove('show');
-            }
-        };
-
-        /**
-         * Renders the individual input fields for defining options.
-         * Exposed globally for Firebase listener.
-         */
-        window.renderOptionInputFields = function() {
-            optionsInputFieldsDiv.innerHTML = ''; // Clear existing fields
-            for (let i = 0; i < MAX_OPTIONS; i++) {
-                const inputGroup = document.createElement('div');
-                inputGroup.className = 'input-group';
-                inputGroup.innerHTML = `
-                    <label for="option${i + 1}">Option ${i + 1}:</label>
-                    <input type="text" id="option${i + 1}" placeholder="Enter option name" class="rounded-md focus:ring-yellow-500 focus:border-yellow-500">
-                `;
-                optionsInputFieldsDiv.appendChild(inputGroup);
-            }
-            // Populate fields with current OPTIONS
-            window.OPTIONS.forEach((option, index) => {
-                const inputField = document.getElementById(`option${index + 1}`);
-                if (inputField) {
-                    inputField.value = option;
-                }
-            });
-        };
-
-        /**
-         * Updates the OPTIONS array based on user input from the individual fields and saves to Firestore.
-         */
-        async function setOptionsFromInput() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
-            window.toggleLoading(true);
-            try {
-                const newOptions = [];
-                for (let i = 0; i < MAX_OPTIONS; i++) {
-                    const inputField = document.getElementById(`option${i + 1}`);
-                    if (inputField && inputField.value.trim() !== '') {
-                        newOptions.push(inputField.value.trim());
-                    }
-                }
-
-                if (newOptions.length === 0) {
-                    showMessage("Please enter at least one option.");
-                    window.toggleLoading(false);
-                    return;
-                }
-
-                // Check for duplicate option names
-                const uniqueOptions = new Set(newOptions.map(opt => opt.toLowerCase()));
-                if (uniqueOptions.size !== newOptions.length) {
-                    showMessage("Duplicate option names detected. Please ensure all options are unique.");
-                    window.toggleLoading(false);
-                    return;
-                }
-
-                // Save options to Firestore
-                const optionsDocRef = doc(window.db, `artifacts/${window.appId}/public/data/ranking_options`, 'current_options');
-                await setDoc(optionsDocRef, { options: newOptions, lastUpdated: new Date() });
-
-                showMessage("Options updated successfully!");
-                // Submissions will be cleared by the clearAllOptions function, which is called after setting new options
-                // This ensures consistency when options change.
-                await clearAllSubmissions(); // Clear existing submissions when options change
-
-            } catch (error) {
-                console.error("Error setting options:", error);
-                showMessage("Failed to set options. Please try again.", 5000);
-            } finally {
-                // The loading overlay will be hidden by checkAllInitialLoaded() after data is reloaded
-            }
-        }
-
-        /**
-         * Clears all defined options and all submissions from Firestore.
-         */
-        async function clearAllOptions() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
-            window.toggleLoading(true);
-            try {
-                // Clear options document
-                const optionsDocRef = doc(window.db, `artifacts/${window.appId}/public/data/ranking_options`, 'current_options');
-                await setDoc(optionsDocRef, { options: [] }); // Set options to empty array
-
-                // Clear all submissions
-                await clearAllSubmissions();
-
-                showMessage("All options and submissions have been cleared.");
-            } catch (error) {
-                console.error("Error clearing all data:", error);
-                showMessage("Failed to clear all data. Please try again.", 5000);
-            } finally {
-                // The loading overlay will be hidden by checkAllInitialLoaded() after data is reloaded
-            }
-        }
-
-        /**
-         * Clears all submissions from Firestore.
-         */
-        async function clearAllSubmissions() {
-             if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
-            window.toggleLoading(true);
-            try {
-                const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
-                const q = query(submissionsColRef);
-                const querySnapshot = await getDocs(q);
-
-                const deletePromises = [];
-                querySnapshot.forEach((doc) => {
-                    deletePromises.push(deleteDoc(doc.ref));
+                noOptionsMessage.classList.add('hidden');
+                options.forEach(option => {
+                    const li = document.createElement('li');
+                    li.className = 'flex items-center justify-between p-2 rounded-lg bg-gray-100 text-gray-700';
+                    li.innerHTML = `
+                        <span>${option}</span>
+                        <button class="remove-option-btn text-red-500 hover:text-red-700" data-option="${option}">
+                            &times;
+                        </button>
+                    `;
+                    optionsList.appendChild(li);
                 });
-                await Promise.all(deletePromises);
-                console.log("All submissions cleared from Firestore.");
-                showMessage("All submissions cleared.", 3000);
-            } catch (error) {
-                console.error("Error clearing submissions:", error);
-                showMessage("Failed to clear submissions. Please try again.", 5000);
-            } finally {
-                // The loading overlay will be hidden by checkAllInitialLoaded() after data is reloaded
             }
         }
-
-        /**
-         * Initializes the ranking input fields (dropdowns).
-         * Exposed globally for Firebase listener.
-         */
-        window.initializeRankingInputs = function() {
-            rankingInputsDiv.innerHTML = ''; // Clear previous inputs
-            if (window.OPTIONS.length === 0) {
-                rankingInputsDiv.innerHTML = '<p class="text-gray-600">Please define options in the "Define Ranking Options" section first.</p>';
+    
+        // Function to render the results table
+        function renderResultsTable() {
+            if (Object.keys(allSubmissions).length === 0) {
+                resultsTable.innerHTML = '<p class="text-gray-500 text-center">Awaiting submissions...</p>';
                 return;
             }
-            window.OPTIONS.forEach(option => {
-                const inputGroup = document.createElement('div');
-                inputGroup.className = 'input-group';
-                // Using encodeURIComponent to create a valid ID from option name
-                const safeId = encodeURIComponent(option).replace(/%/g, '_');
-                inputGroup.innerHTML = `
-                    <label for="${safeId}">${option}:</label>
-                    <select id="${safeId}" class="rounded-md focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">Select Rank</option>
-                        ${window.OPTIONS.map((_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('')}
-                    </select>
-                `;
-                rankingInputsDiv.appendChild(inputGroup);
-            });
-        };
-
-        /**
-         * Calculates the total score and average score for each option based on all submissions.
-         * Scoring: Rank 1 = Max Points (OPTIONS.length), Rank 2 = Max Points - 1, ..., Rank N = 1 point.
-         * @returns {Array<Object>} An array of objects, each with 'option', 'score', 'averageScore', and 'rank'.
-         */
-        function calculateGroupRanking() {
-            const optionScores = {};
-            window.OPTIONS.forEach(option => {
-                optionScores[option] = 0; // Initialize total scores for all options
-            });
-
-            window.allSubmissions.forEach(submission => {
-                window.OPTIONS.forEach(option => {
-                    const rank = submission.ranks[option];
-                    if (rank) {
-                        // Assign points: 1st rank gets OPTIONS.length points, last rank gets 1 point
-                        optionScores[option] += (window.OPTIONS.length - rank + 1);
-                    }
-                });
-            });
-
-            // Convert to an array for sorting and ranking, and calculate average score
-            let rankedOptions = Object.keys(optionScores).map(option => {
-                const totalScore = optionScores[option];
-                const numberOfParticipants = window.allSubmissions.length;
-                const averageScore = numberOfParticipants > 0 ? (totalScore / numberOfParticipants) : 0;
-                return {
-                    option: option,
-                    score: totalScore,
-                    averageScore: parseFloat(averageScore.toFixed(2)) // Round to 2 decimal places
-                };
-            });
-
-            // Sort by total score in descending order
-            rankedOptions.sort((a, b) => b.score - a.score);
-
-            // Assign overall ranks
-            rankedOptions.forEach((item, index) => {
-                if (index > 0 && item.score === rankedOptions[index - 1].score) {
-                    item.rank = rankedOptions[index - 1].rank; // Same rank for ties
-                } else {
-                    item.rank = index + 1;
+            
+            // Calculate scores
+            const scores = {};
+            currentOptions.forEach(option => scores[option] = 0);
+            
+            Object.values(allSubmissions).forEach(submission => {
+                if (Array.isArray(submission.rankings)) {
+                     submission.rankings.forEach((option, index) => {
+                        const rank = index + 1;
+                        // Score options based on their rank (lower is better)
+                        scores[option] += (currentOptions.length - rank + 1);
+                    });
                 }
             });
-
-            return rankedOptions;
-        }
-
-        /**
-         * Renders the group ranking results in the table.
-         * Exposed globally for Firebase listener.
-         */
-        window.renderGroupRanking = function() {
-            const rankedOptions = calculateGroupRanking();
-            resultsTableBody.innerHTML = ''; // Clear previous results
-
-            if (window.allSubmissions.length === 0) {
-                resultsTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No submissions yet. Be the first!</td></tr>`;
-                return;
-            }
-
-            rankedOptions.forEach(item => {
-                const row = resultsTableBody.insertRow();
-                row.innerHTML = `
-                    <td class="font-bold text-blue-700">${item.rank}</td>
-                    <td>${item.option}</td>
-                    <td>${item.score}</td>
-                    <td>${item.averageScore}</td>
+    
+            // Sort options by score (descending)
+            const sortedOptions = Object.keys(scores).sort((a, b) => scores[b] - scores[a]);
+            
+            // Create the table HTML
+            let tableHTML = `
+                <div class="flex flex-col">
+                    <div class="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
+                        <div class="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
+                            <div class="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Rank
+                                            </th>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Option
+                                            </th>
+                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                                Score
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white divide-y divide-gray-200">
+            `;
+    
+            sortedOptions.forEach((option, index) => {
+                tableHTML += `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${option}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${scores[option]}</td>
+                    </tr>
                 `;
             });
-        };
-
-        /**
-         * Renders all individual participant submissions in a separate table.
-         * Exposed globally for Firebase listener.
-         */
-        window.renderAllSubmissions = function() {
-            // Clear previous headers and body
-            submissionsTableHead.innerHTML = '<th>Participant</th>';
-            submissionsTableBody.innerHTML = '';
-
-            // Add option headers
-            window.OPTIONS.forEach(option => {
-                const th = document.createElement('th');
-                th.textContent = option;
-                submissionsTableHead.appendChild(th);
-            });
-
-            if (window.allSubmissions.length === 0) {
-                submissionsTableBody.innerHTML = `<tr><td colspan="${window.OPTIONS.length + 1}" class="text-center text-gray-500">No submissions yet.</td></tr>`;
-                return;
-            }
-
-            // Add submission rows
-            window.allSubmissions.forEach(submission => {
-                const row = submissionsTableBody.insertRow();
-                const participantCell = row.insertCell();
-                participantCell.textContent = submission.name;
-
-                window.OPTIONS.forEach(option => {
-                    const rankCell = row.insertCell();
-                    rankCell.textContent = submission.ranks[option] || '-'; // Show '-' if not ranked
-                });
-            });
-        };
-
-        /**
-         * Handles the submission of participant ranks and saves to Firestore.
-         */
-        async function handleSubmitRanks() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
-            if (window.OPTIONS.length === 0) {
-                showMessage("Please define options in the 'Define Ranking Options' section first.");
-                return;
-            }
-
-            const participantName = participantNameInput.value.trim();
-            if (!participantName) {
-                showMessage("Please enter your name.");
-                return;
-            }
-
-            const currentRanks = {};
-            const selectedRanks = new Set(); // To check for duplicate ranks
-            let allRanked = true;
-
-            window.OPTIONS.forEach(option => {
-                // Using encodeURIComponent to create a valid ID from option name
-                const safeId = encodeURIComponent(option).replace(/%/g, '_');
-                const selectElement = document.getElementById(safeId);
-
-                if (!selectElement) {
-                    allRanked = false; // Treat as not fully ranked if element is missing
-                    return;
-                }
-                const rank = selectElement.value;
-                if (!rank) {
-                    allRanked = false;
-                } else if (selectedRanks.has(rank)) {
-                    showMessage(`Duplicate rank '${rank}' detected. Each option must have a unique rank.`);
-                    allRanked = false;
-                    return;
-                } else {
-                    currentRanks[option] = parseInt(rank);
-                    selectedRanks.add(rank);
-                }
-            });
-
-            if (!allRanked) {
-                if (selectedRanks.size !== window.OPTIONS.length) {
-                     showMessage("Please rank all options uniquely.");
-                }
-                return;
-            }
-
-            window.toggleLoading(true);
+    
+            tableHTML += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+    
+            resultsTable.innerHTML = tableHTML;
+        }
+    
+        // --- Firebase Functions ---
+        async function initializeFirebase() {
             try {
-                const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
+                // Ensure the Firebase config is valid JSON and not empty
+                const firebaseConfig = JSON.parse(firebaseConfigString);
                 
-                // Check if this participant has already submitted (case-insensitive name match)
-                const q = query(submissionsColRef, where("name", "==", participantName));
-                const querySnapshot = await getDocs(q);
-
-                if (!querySnapshot.empty) {
-                    // Update existing submission
-                    const docToUpdate = querySnapshot.docs[0];
-                    await setDoc(doc(submissionsColRef, docToUpdate.id), {
-                        name: participantName,
-                        ranks: currentRanks,
-                        timestamp: new Date()
-                    });
-                    showMessage(`Updated ranks for ${participantName}!`);
-                } else {
-                    // Add new submission
-                    await addDoc(submissionsColRef, {
-                        name: participantName,
-                        ranks: currentRanks,
-                        timestamp: new Date()
-                    });
-                    showMessage(`Thanks, ${participantName}! Your ranks have been submitted.`);
+                // If firebaseConfig is empty, show a specific error
+                if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.projectId) {
+                    throw new Error("Firebase configuration is missing or invalid. Please ensure __firebase_config is provided.");
                 }
+    
+                app = initializeApp(firebaseConfig);
+                auth = getAuth(app);
+                db = getFirestore(app);
+                
+                // Sign in the user, either with a custom token or anonymously
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+                
+                // Update UI after successful auth
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        userIdEl.textContent = userId;
+                        statusEl.textContent = 'Connected and ready!';
+                        statusEl.classList.remove('text-gray-500');
+                        statusEl.classList.add('text-green-600');
+                        
+                        // Start listening for real-time updates after auth is complete
+                        listenForOptions();
+                        listenForSubmissions();
+                    } else {
+                        userIdEl.textContent = 'Not authenticated';
+                        statusEl.textContent = 'Failed to connect.';
+                        statusEl.classList.remove('text-green-600');
+                        statusEl.classList.add('text-red-600');
+                    }
+                });
+    
             } catch (error) {
-                console.error("Error submitting ranks:", error);
-                showMessage("Failed to submit ranks. Please try again.", 5000);
-            } finally {
-                // The loading overlay will be hidden by checkAllInitialLoaded() after data is reloaded
-                // Clear form for next participant
-                participantNameInput.value = '';
-                window.initializeRankingInputs(); // Re-initialize to clear selected ranks
+                console.error("Error initializing Firebase:", error);
+                showMessage("Connection Error", `Failed to connect to Firebase. Please check your project configuration and security rules. Error: ${error.message}`);
+                userIdEl.textContent = 'Error';
+                statusEl.textContent = 'Connection Failed';
+                statusEl.classList.remove('text-green-600');
+                statusEl.classList.add('text-red-600');
             }
         }
-
-        // Event Listeners
-        setOptionsBtn.addEventListener('click', setOptionsFromInput);
-        clearOptionsBtn.addEventListener('click', clearAllOptions);
-        submitRanksBtn.addEventListener('click', handleSubmitRanks);
-
-        // Initial setup on page load
-        window.onload = async function() {
-            window.toggleLoading(true); // Show loading immediately
-            try {
-                await window.initializeFirebase(); // This promise now resolves when auth is ready and listeners are set up
-                // The actual hiding of the loading overlay will happen in checkAllInitialLoaded()
-                // after both initial snapshots are received.
-            } catch (error) {
-                console.error("Application startup failed:", error);
-                showMessage("Failed to start the application. Check console for details.", 5000);
-                window.toggleLoading(false); // Hide loading if initialization itself fails
+    
+        // Listen for real-time changes to the options list
+        function listenForOptions() {
+            const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
+            onSnapshot(optionsDocRef, (docSnap) => {
+                if (docSnap.exists()) {
+                    currentOptions = docSnap.data().options || [];
+                } else {
+                    currentOptions = [];
+                }
+                
+                // Update both the admin options list and the draggable ranking list
+                renderOptionsList(currentOptions);
+                renderDraggableList();
+                
+                // Show/hide sections based on whether options exist
+                if (currentOptions.length > 0) {
+                    rankingSection.classList.remove('hidden');
+                } else {
+                    rankingSection.classList.add('hidden');
+                }
+            });
+        }
+    
+        // Listen for real-time changes to the submission data
+        function listenForSubmissions() {
+            const submissionsCollRef = collection(db, `artifacts/${appId}/public/data/ranking_submissions`);
+            onSnapshot(submissionsCollRef, (querySnap) => {
+                allSubmissions = {};
+                querySnap.forEach((doc) => {
+                    allSubmissions[doc.id] = doc.data();
+                });
+                
+                // Render the results table with the new data
+                renderResultsTable();
+                
+                // Show the results section
+                resultsSection.classList.remove('hidden');
+            });
+        }
+    
+        // --- Event Listeners and Logic ---
+    
+        // Add a new option to the database
+        addOptionBtn.addEventListener('click', async () => {
+            if (!userId) {
+                showMessage("Authentication Required", "Please wait for authentication to complete before adding options.");
+                return;
             }
+            const newOption = optionInput.value.trim();
+            if (newOption && !currentOptions.includes(newOption)) {
+                const updatedOptions = [...currentOptions, newOption];
+                const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
+                try {
+                    await setDoc(optionsDocRef, { options: updatedOptions, timestamp: serverTimestamp() });
+                    optionInput.value = ''; // Clear input
+                } catch (e) {
+                    showMessage("Database Error", "Failed to add option. Check your internet connection and security rules.");
+                    console.error("Error adding document: ", e);
+                }
+            } else if (currentOptions.includes(newOption)) {
+                showMessage("Duplicate Option", "This option already exists. Please enter a unique one.");
+            }
+        });
+    
+        // Clear all options from the database
+        clearAllBtn.addEventListener('click', async () => {
+             if (!userId) {
+                showMessage("Authentication Required", "Please wait for authentication to complete before clearing options.");
+                return;
+            }
+            // Ask for a confirmation before clearing.
+            showMessage("Confirmation", "Are you sure you want to clear all ranking options? This action cannot be undone.");
+    
+            // We'll add a temporary listener to the modal's close button to handle the confirmation.
+            // This is a simple pattern for a "confirm" modal.
+            const tempConfirmListener = async () => {
+                messageCloseBtn.removeEventListener('click', tempConfirmListener);
+                try {
+                    const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
+                    await setDoc(optionsDocRef, { options: [], timestamp: serverTimestamp() });
+                } catch (e) {
+                    showMessage("Database Error", "Failed to clear options. Check your internet connection and security rules.");
+                    console.error("Error clearing options: ", e);
+                }
+            };
+            messageCloseBtn.addEventListener('click', tempConfirmListener);
+        });
+    
+        // Remove a single option from the list (delegated event listener)
+        optionsList.addEventListener('click', async (event) => {
+            if (!userId) {
+                showMessage("Authentication Required", "Please wait for authentication to complete before removing options.");
+                return;
+            }
+            if (event.target.classList.contains('remove-option-btn')) {
+                const optionToRemove = event.target.dataset.option;
+                const updatedOptions = currentOptions.filter(option => option !== optionToRemove);
+                const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
+                try {
+                    await setDoc(optionsDocRef, { options: updatedOptions, timestamp: serverTimestamp() });
+                } catch (e) {
+                    showMessage("Database Error", "Failed to remove option. Check your internet connection and security rules.");
+                    console.error("Error removing option: ", e);
+                }
+            }
+        });
+    
+        // Submit the user's rankings to the database
+        submitBtn.addEventListener('click', async () => {
+            if (!userId) {
+                showMessage("Authentication Required", "Please wait for authentication to complete before submitting.");
+                return;
+            }
+            const rankings = Array.from(draggableContainer.children).map(item => item.dataset.option);
+            const submissionData = {
+                userId: userId,
+                rankings: rankings,
+                timestamp: serverTimestamp()
+            };
+    
+            // Create a new document for this user's submission
+            const submissionDocRef = doc(db, `artifacts/${appId}/public/data/ranking_submissions`, userId);
+            try {
+                await setDoc(submissionDocRef, submissionData);
+                showMessage("Success!", "Your ranking has been submitted. The results table will update in real-time for everyone.");
+            } catch (e) {
+                showMessage("Database Error", "Failed to submit ranking. Check your internet connection and security rules.");
+                console.error("Error adding document: ", e);
+            }
+        });
+    
+        // --- Initialization ---
+        window.onload = () => {
+            initializeFirebase();
         };
     </script>
 </body>
