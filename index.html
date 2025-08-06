@@ -1,13 +1,4 @@
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-const firebaseConfig = {
-  apiKey: "AIzaSyB9_qveikzSy4KU9ZF9GSuWIXZFaSczep8",
-  authDomain: "keys-swot-matrix-ranking.firebaseapp.com",
-  projectId: "keys-swot-matrix-ranking",
-  storageBucket: "keys-swot-matrix-ranking.firebasestorage.app",
-  messagingSenderId: "865452112588",
-  appId: "1:865452112588:web:f3e322c113cc7444e1a069",
-  measurementId: "G-0PFJPY6D10"
-};<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -55,7 +46,7 @@ const firebaseConfig = {
         }
         .ranking-button:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            box-shadow: 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
         }
     </style>
 </head>
@@ -119,21 +110,22 @@ const firebaseConfig = {
     <script type="module">
         // Firebase SDK imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
     
         // ------------------------------------------------------------------------------------------------
-        // IMPORTANT: You MUST replace the placeholder firebaseConfig object below with your project's 
-        // configuration from the Firebase console. You can find this in Project Settings > Your apps.
+        // Your project's Firebase configuration has been inserted below.
+        // It's important that this is correct for the app to function.
         // ------------------------------------------------------------------------------------------------
         const firebaseConfig = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_AUTH_DOMAIN",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_STORAGE_BUCKET",
-            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-            appId: "YOUR_APP_ID"
+          apiKey: "AIzaSyB9_qveikzSy4KU9ZF9GSuWIXZFaSczep8",
+          authDomain: "keys-swot-matrix-ranking.firebaseapp.com",
+          projectId: "keys-swot-matrix-ranking",
+          storageBucket: "keys-swot-matrix-ranking.firebasestorage.app",
+          messagingSenderId: "865452112588",
+          appId: "1:865452112588:web:f3e322c113cc7444e1a069"
         };
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         
         // --- DOM Elements ---
         const userIdEl = document.getElementById('userId');
@@ -338,25 +330,28 @@ const firebaseConfig = {
         // --- Firebase Functions ---
         async function initializeFirebase() {
             try {
-                // Check if the placeholder config is still in use.
-                if (firebaseConfig.projectId === "YOUR_PROJECT_ID") {
-                    console.warn("Firebase configuration is using placeholder values. Please update the firebaseConfig object with your project's details.");
-                    showMessage("Your Firebase configuration is missing. Please replace the placeholder values in the 'firebaseConfig' object within the code with your actual project details from the Firebase console.");
-                    userIdEl.textContent = 'Error';
-                    statusEl.textContent = 'Configuration Missing';
-                    statusEl.classList.remove('text-green-600');
-                    statusEl.classList.add('text-red-600');
-                    return; // Exit the function to prevent further errors
-                }
-    
+                // Initialize Firebase app and services.
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
+
+                // Attempt to sign in with the provided custom token first.
+                // If it fails, catch the error and fall back to anonymous sign-in.
+                try {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await signInWithCustomToken(auth, __initial_auth_token);
+                    } else {
+                        // If no custom token is available, sign in anonymously.
+                        await signInAnonymously(auth);
+                    }
+                } catch (tokenError) {
+                    // If the custom token sign-in fails (e.g., token mismatch), fall back to anonymous sign-in.
+                    console.error("Custom token sign-in failed, falling back to anonymous sign-in:", tokenError);
+                    await signInAnonymously(auth);
+                }
                 
-                // Sign in the user anonymously for public access
-                await signInAnonymously(auth);
-                
-                // Update UI after successful auth
+                // Now that the user is authenticated (either with a custom token or anonymously), 
+                // we can set up the real-time listeners.
                 onAuthStateChanged(auth, (user) => {
                     if (user) {
                         userId = user.uid;
@@ -365,14 +360,14 @@ const firebaseConfig = {
                         statusEl.classList.remove('text-gray-500');
                         statusEl.classList.add('text-green-600');
                         
-                        // Start listening for real-time updates after auth is complete
+                        console.log("Authenticated with userId:", userId);
+                        
+                        // All database-related logic now happens here, after successful authentication.
                         listenForOptions();
                         listenForSubmissions();
                     } else {
-                        userIdEl.textContent = 'Not authenticated';
-                        statusEl.textContent = 'Failed to connect.';
-                        statusEl.classList.remove('text-green-600');
-                        statusEl.classList.add('text-red-600');
+                         console.error("User object is null after authentication attempt.");
+                         showMessage("Failed to connect to Firebase. User object is missing.");
                     }
                 });
     
@@ -388,7 +383,7 @@ const firebaseConfig = {
     
         // Listen for real-time changes to the options list
         function listenForOptions() {
-            const optionsDocRef = doc(db, `ranking_data/ranking_options`, 'current_options');
+            const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'options_list');
             onSnapshot(optionsDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     currentOptions = docSnap.data().options || [];
@@ -411,7 +406,7 @@ const firebaseConfig = {
     
         // Listen for real-time changes to the submission data
         function listenForSubmissions() {
-            const submissionsCollRef = collection(db, `ranking_data/ranking_submissions`);
+            const submissionsCollRef = collection(db, `artifacts/${appId}/public/data/ranking_submissions`);
             onSnapshot(submissionsCollRef, (querySnap) => {
                 allSubmissions = {};
                 querySnap.forEach((doc) => {
@@ -437,7 +432,7 @@ const firebaseConfig = {
             const newOption = optionInput.value.trim();
             if (newOption && !currentOptions.includes(newOption)) {
                 const updatedOptions = [...currentOptions, newOption];
-                const optionsDocRef = doc(db, `ranking_data/ranking_options`, 'current_options');
+                const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'options_list');
                 try {
                     await setDoc(optionsDocRef, { options: updatedOptions, timestamp: serverTimestamp() });
                     optionInput.value = ''; // Clear input
@@ -464,7 +459,7 @@ const firebaseConfig = {
             const tempConfirmListener = async () => {
                 messageCloseBtn.removeEventListener('click', tempConfirmListener);
                 try {
-                    const optionsDocRef = doc(db, `ranking_data/ranking_options`, 'current_options');
+                    const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'options_list');
                     await setDoc(optionsDocRef, { options: [], timestamp: serverTimestamp() });
                 } catch (e) {
                     showMessage("Failed to clear options. Check your internet connection and security rules.");
@@ -483,7 +478,7 @@ const firebaseConfig = {
             if (event.target.classList.contains('remove-option-btn')) {
                 const optionToRemove = event.target.dataset.option;
                 const updatedOptions = currentOptions.filter(option => option !== optionToRemove);
-                const optionsDocRef = doc(db, `ranking_data/ranking_options`, 'current_options');
+                const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'options_list');
                 try {
                     await setDoc(optionsDocRef, { options: updatedOptions, timestamp: serverTimestamp() });
                 } catch (e) {
@@ -507,7 +502,7 @@ const firebaseConfig = {
             };
     
             // Create a new document for this user's submission
-            const submissionDocRef = doc(db, `ranking_data/ranking_submissions`, userId);
+            const submissionDocRef = doc(db, `artifacts/${appId}/public/data/ranking_submissions`, userId);
             try {
                 await setDoc(submissionDocRef, submissionData);
                 showMessage("Success! Your ranking has been submitted. The results table will update in real-time for everyone.");
