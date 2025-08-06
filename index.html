@@ -3,510 +3,781 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Collaborative Ranking Model</title>
-    <!-- Use Tailwind CSS from CDN for simplicity -->
+    <title>Group Ranking Model</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
         body {
             font-family: 'Inter', sans-serif;
-            -webkit-font-smoothing: antialiased;
-            -moz-osx-font-smoothing: grayscale;
-            background-color: #f3f4f6;
+            background-color: #f0f4f8;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            min-height: 100vh;
+            padding: 2rem;
+            box-sizing: border-box;
         }
-        .message-modal {
+        .container {
+            background-color: #ffffff;
+            border-radius: 1rem;
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+            padding: 2rem;
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 1rem;
+        }
+        .input-group label {
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        .input-group select, .input-group input[type="text"], .input-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid #cbd5e0;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            color: #2d3748;
+            background-color: #edf2f7;
+        }
+        .btn-primary {
+            background-color: #4c51bf;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            font-weight: 600;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+        }
+        .btn-primary:hover {
+            background-color: #5a61d6;
+            transform: translateY(-1px);
+        }
+        .btn-primary:active {
+            transform: translateY(0);
+            box-shadow: none;
+        }
+        .table-container {
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        th {
+            background-color: #ebf4ff;
+            color: #2d3748;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 0.875rem;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        tr:hover {
+            background-color: #f7fafc;
+        }
+        .message-box {
+            background-color: #fff;
+            border: 1px solid #cbd5e0;
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            text-align: center;
+            font-weight: 600;
+            color: #2d3748;
+            display: none;
+        }
+        .message-box.show {
+            display: block;
+        }
+        .loading-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: rgba(0, 0, 0, 0.5);
+            background: rgba(255, 255, 255, 0.8);
             display: flex;
             justify-content: center;
             align-items: center;
-            z-index: 100;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s ease;
+            z-index: 1000;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #4c51bf;
+            display: none;
         }
-        .message-modal.show {
-            opacity: 1;
-            visibility: visible;
+        .loading-overlay.show {
+            display: flex;
         }
-        .message-box {
-            background-color: white;
-            padding: 1.5rem;
-            border-radius: 0.75rem;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
-            max-width: 90%;
-            width: 400px;
-        }
-        .ranking-button {
-            transition: all 0.2s ease;
-        }
-        .ranking-button:hover {
-            transform: translateY(-2px);
-            box-shadow: 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+
+        /* --- Print-specific styles --- */
+        @media print {
+            body {
+                background-color: #fff;
+            }
+            .container {
+                box-shadow: none;
+                padding: 0;
+            }
+            .p-6.bg-yellow-50, .p-6.bg-blue-50, .p-6.bg-pink-50, .message-box, #userIdDisplay, .loading-overlay {
+                display: none;
+            }
+            .p-6.bg-green-50, .p-6.bg-purple-50 {
+                display: block !important;
+                margin-top: 2rem;
+                padding: 0;
+                box-shadow: none;
+            }
+            .section-title {
+                margin-top: 1rem;
+            }
+            .table-container {
+                overflow-x: visible;
+            }
         }
     </style>
-</head>
-<body class="bg-gray-100 min-h-screen flex items-center justify-center p-4">
-
-    <!-- Main Container -->
-    <div class="w-full max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-6 md:p-8 space-y-8">
-        <h1 class="text-3xl md:text-4xl font-bold text-center text-gray-800">Collaborative Group Ranking</h1>
-
-        <!-- User ID & Status -->
-        <div class="text-center text-gray-600 space-y-2">
-            <p>Your User ID: <span id="userId" class="font-semibold text-blue-600">Loading...</span></p>
-            <p>App Status: <span id="status" class="font-semibold text-gray-500">Connecting to database...</span></p>
-        </div>
-
-        <!-- Options Section -->
-        <div id="options-section" class="space-y-4">
-            <h2 class="text-2xl font-semibold text-gray-700">Define Ranking Options</h2>
-            <div class="flex flex-col md:flex-row md:space-x-4 space-y-2 md:space-y-0">
-                <input type="text" id="optionInput" class="flex-grow p-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter an option (e.g., 'Team A', 'Idea 2')">
-                <button id="addOptionBtn" class="ranking-button bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-blue-700">Add Option</button>
-            </div>
-            <div class="mt-4 p-4 border-2 border-dashed border-gray-300 rounded-lg">
-                <ul id="optionsList" class="space-y-2">
-                    <!-- Options will be dynamically added here -->
-                </ul>
-                <div id="noOptionsMessage" class="text-gray-400 text-center">No options defined yet. Add some to get started!</div>
-            </div>
-            <div class="flex flex-col md:flex-row md:space-x-4 space-y-2 md:space-y-0">
-                <button id="clearAllBtn" class="ranking-button bg-red-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-red-700 w-full md:w-auto">Clear All Options</button>
-            </div>
-        </div>
-
-        <!-- Ranking and Submission Section -->
-        <div id="ranking-section" class="space-y-4 hidden">
-            <h2 class="text-2xl font-semibold text-gray-700">Your Rankings</h2>
-            <div id="draggable-container" class="space-y-2 p-4 bg-gray-50 border-2 border-gray-300 rounded-lg">
-                <!-- Draggable items will be dynamically added here -->
-            </div>
-            <button id="submitBtn" class="ranking-button bg-green-600 text-white font-semibold py-3 px-6 rounded-lg hover:bg-green-700 w-full">Submit My Ranking</button>
-        </div>
-
-        <!-- Results Section -->
-        <div id="results-section" class="space-y-4 hidden">
-            <h2 class="text-2xl font-semibold text-gray-700">Group Results</h2>
-            <div id="resultsTable" class="bg-gray-50 p-4 rounded-lg shadow-inner">
-                <p class="text-gray-500 text-center">Awaiting submissions...</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Message Modal (replaces alert/confirm) -->
-    <div id="messageModal" class="message-modal">
-        <div class="message-box">
-            <div id="messageContent" class="text-gray-800 text-lg mb-4"></div>
-            <button id="messageCloseBtn" class="w-full bg-blue-600 text-white font-semibold py-2 rounded-lg hover:bg-blue-700">Close</button>
-        </div>
-    </div>
-
-    <!-- Firebase SDK Imports -->
+    <!-- Firebase SDKs -->
     <script type="module">
-        // Firebase SDK imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-    
-        // ------------------------------------------------------------------------------------------------
-        // IMPORTANT: Paste your NEW firebaseConfig object here from your new Firebase project.
-        // ------------------------------------------------------------------------------------------------
-        const firebaseConfig = {
-            // YOUR NEW CONFIGURATION GOES HERE
-        };
-        
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, getDoc, setDoc, addDoc, onSnapshot, collection, query, where, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // Global variables for Firebase instances
+        window.firebaseApp = null;
+        window.db = null;
+        window.auth = null;
+        window.currentUserId = null;
+        window.isAuthReady = false; // Flag to indicate auth state is determined
+
+        // Provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        
-        // --- DOM Elements ---
-        const userIdEl = document.getElementById('userId');
-        const statusEl = document.getElementById('status');
-        const optionsSection = document.getElementById('options-section');
-        const rankingSection = document.getElementById('ranking-section');
-        const resultsSection = document.getElementById('results-section');
-        const optionsList = document.getElementById('optionsList');
-        const optionInput = document.getElementById('optionInput');
-        const addOptionBtn = document.getElementById('addOptionBtn');
-        const clearAllBtn = document.getElementById('clearAllBtn');
-        const draggableContainer = document.getElementById('draggable-container');
-        const submitBtn = document.getElementById('submitBtn');
-        const resultsTable = document.getElementById('resultsTable');
-        const noOptionsMessage = document.getElementById('noOptionsMessage');
-        const messageModal = document.getElementById('messageModal');
-        const messageContent = document.getElementById('messageContent');
-        const messageCloseBtn = document.getElementById('messageCloseBtn');
-    
-        // --- Global State ---
-        let app = null;
-        let auth = null;
-        let db = null;
-        let userId = null;
-        let currentOptions = [];
-        let allSubmissions = {};
-        
-        // --- Helper Functions ---
-    
-        // Custom modal function to display messages to the user.
-        function showMessage(message) {
-            messageContent.textContent = message;
-            messageModal.classList.add('show');
-        }
-    
-        messageCloseBtn.addEventListener('click', () => {
-            messageModal.classList.remove('show');
-        });
-    
-        // Function to create a draggable list item
-        function createDraggableItem(option) {
-            const li = document.createElement('li');
-            li.draggable = true;
-            li.dataset.option = option;
-            li.className = 'draggable-item p-3 bg-white rounded-lg shadow-sm cursor-move flex items-center justify-between text-gray-700 hover:bg-gray-100 transition-colors duration-200 ease-in-out';
-            li.innerHTML = `
-                <span>${option}</span>
-                <span class="text-gray-400 text-sm">Drag to reorder</span>
-            `;
-            return li;
-        }
-    
-        // Function to render the draggable ranking list
-        function renderDraggableList() {
-            draggableContainer.innerHTML = '';
-            if (currentOptions.length === 0) {
-                draggableContainer.innerHTML = '<p class="text-gray-500 text-center">No options available to rank.</p>';
-                return;
-            }
-            currentOptions.forEach(option => {
-                const item = createDraggableItem(option);
-                draggableContainer.appendChild(item);
-            });
-    
-            // Add drag and drop event listeners
-            let dragSrcEl = null;
-            draggableContainer.querySelectorAll('.draggable-item').forEach(item => {
-                item.addEventListener('dragstart', (e) => {
-                    e.target.classList.add('opacity-40');
-                    dragSrcEl = e.target;
-                    e.dataTransfer.effectAllowed = 'move';
-                    e.dataTransfer.setData('text/html', e.target.innerHTML);
-                });
-    
-                item.addEventListener('dragover', (e) => {
-                    e.preventDefault();
-                    e.dataTransfer.dropEffect = 'move';
-                });
-    
-                item.addEventListener('dragenter', (e) => {
-                    e.target.classList.add('bg-gray-200');
-                });
-    
-                item.addEventListener('dragleave', (e) => {
-                    e.target.classList.remove('bg-gray-200');
-                });
-    
-                item.addEventListener('drop', (e) => {
-                    e.stopPropagation();
-                    if (dragSrcEl !== e.target) {
-                        const targetItem = e.target.closest('.draggable-item');
-                        if (targetItem) {
-                            const newIndex = Array.from(draggableContainer.children).indexOf(targetItem);
-                            const oldIndex = Array.from(draggableContainer.children).indexOf(dragSrcEl);
-                            const temp = currentOptions[newIndex];
-                            currentOptions[newIndex] = currentOptions[oldIndex];
-                            currentOptions[oldIndex] = temp;
-                            renderDraggableList(); // Re-render to reflect the change
-                        }
-                    }
-                    e.target.classList.remove('bg-gray-200');
-                });
-    
-                item.addEventListener('dragend', (e) => {
-                    e.target.classList.remove('opacity-40');
-                    draggableContainer.querySelectorAll('.draggable-item').forEach(el => el.classList.remove('bg-gray-200'));
-                });
-            });
-        }
-    
-        // Function to render the options list for the administrator
-        function renderOptionsList(options) {
-            optionsList.innerHTML = '';
-            if (options.length === 0) {
-                noOptionsMessage.classList.remove('hidden');
-            } else {
-                noOptionsMessage.classList.add('hidden');
-                options.forEach(option => {
-                    const li = document.createElement('li');
-                    li.className = 'flex items-center justify-between p-2 rounded-lg bg-gray-100 text-gray-700';
-                    li.innerHTML = `
-                        <span>${option}</span>
-                        <button class="remove-option-btn text-red-500 hover:text-red-700" data-option="${option}">
-                            &times;
-                        </button>
-                    `;
-                    optionsList.appendChild(li);
-                });
-            }
-        }
-    
-        // Function to render the results table
-        function renderResultsTable() {
-            if (Object.keys(allSubmissions).length === 0) {
-                resultsTable.innerHTML = '<p class="text-gray-500 text-center">Awaiting submissions...</p>';
-                return;
-            }
-            
-            // Calculate scores
-            const scores = {};
-            currentOptions.forEach(option => scores[option] = 0);
-            
-            Object.values(allSubmissions).forEach(submission => {
-                if (Array.isArray(submission.rankings)) {
-                     submission.rankings.forEach((option, index) => {
-                        const rank = index + 1;
-                        // Score options based on their rank (lower is better)
-                        scores[option] += (currentOptions.length - rank + 1);
-                    });
-                }
-            });
-    
-            // Sort options by score (descending)
-            const sortedOptions = Object.keys(scores).sort((a, b) => scores[b] - scores[a]);
-            
-            // Create the table HTML
-            let tableHTML = `
-                <div class="flex flex-col">
-                    <div class="-my-2 overflow-x-auto sm:-mx-6 lg:-mx-8">
-                        <div class="py-2 align-middle inline-block min-w-full sm:px-6 lg:px-8">
-                            <div class="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg">
-                                <table class="min-w-full divide-y divide-gray-200">
-                                    <thead class="bg-gray-50">
-                                        <tr>
-                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                Rank
-                                            </th>
-                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                Option
-                                            </th>
-                                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                                Score
-                                            </th>
-                                        </tr>
-                                    </thead>
-                                    <tbody class="bg-white divide-y divide-gray-200">
-            `;
-    
-            sortedOptions.forEach((option, index) => {
-                tableHTML += `
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${index + 1}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${option}</td>
-                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${scores[option]}</td>
-                    </tr>
-                `;
-            });
-    
-            tableHTML += `
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-    
-            resultsTable.innerHTML = tableHTML;
-        }
-    
-        // --- Firebase Functions ---
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        /**
+         * Initializes Firebase and sets up authentication.
+         */
         async function initializeFirebase() {
             try {
-                app = initializeApp(firebaseConfig);
-                auth = getAuth(app);
-                db = getFirestore(app);
-                
-                // Attempt to sign in with the provided custom token first.
-                try {
-                    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        console.log("Signed in with custom token.");
-                    } else {
-                        await signInAnonymously(auth);
-                        console.log("Signed in anonymously.");
-                    }
-                } catch (tokenError) {
-                    console.error("Custom token sign-in failed, falling back to anonymous sign-in:", tokenError);
-                    await signInAnonymously(auth);
-                    console.log("Signed in anonymously after token failure.");
-                }
-                
-                onAuthStateChanged(auth, (user) => {
-                    if (user) {
-                        userId = user.uid;
-                        userIdEl.textContent = userId;
-                        statusEl.textContent = 'Connected and ready!';
-                        statusEl.classList.remove('text-gray-500', 'text-red-600');
-                        statusEl.classList.add('text-green-600');
-                        console.log("Authenticated with userId:", userId);
-                        listenForOptions();
-                        listenForSubmissions();
-                    } else {
-                         console.error("User object is null after authentication attempt. Something is wrong with the auth process.");
-                         showMessage("Failed to connect to Firebase. User object is missing.");
-                    }
+                window.firebaseApp = initializeApp(firebaseConfig);
+                window.db = getFirestore(window.firebaseApp);
+                window.auth = getAuth(window.firebaseApp);
+
+                // Use a Promise to ensure auth state is resolved before proceeding
+                return new Promise((resolve, reject) => {
+                    const unsubscribe = onAuthStateChanged(window.auth, async (user) => {
+                        if (user) {
+                            window.currentUserId = user.uid;
+                            document.getElementById('userIdDisplay').textContent = `Your User ID: ${window.currentUserId}`;
+                            window.isAuthReady = true;
+                            console.log("Firebase Auth Ready. User ID:", window.currentUserId);
+                            setupFirestoreListeners(); // Setup listeners once authenticated
+                            unsubscribe(); // Stop listening after first auth state is determined
+                            resolve(); // Resolve the promise
+                        } else {
+                            if (!window.currentUserId) {
+                                try {
+                                    if (initialAuthToken) {
+                                        await signInWithCustomToken(window.auth, initialAuthToken);
+                                    } else {
+                                        await signInAnonymously(window.auth);
+                                    }
+                                    console.log("Attempting anonymous sign-in or custom token sign-in...");
+                                } catch (signInError) {
+                                    console.error("Error during sign-in:", signInError);
+                                    reject(signInError);
+                                }
+                            }
+                        }
+                    }, (authError) => {
+                        console.error("Error in onAuthStateChanged:", authError);
+                        reject(authError);
+                    });
                 });
-    
             } catch (error) {
-                console.error("Error initializing Firebase:", error);
-                // More specific error message for API key issues.
-                if (error.code === 'auth/invalid-api-key') {
-                    showMessage("Failed to connect: The API key provided is invalid. Please double-check your Firebase project settings.");
-                    console.error("Critical Error: The API key is invalid. Please verify it in your Firebase project console under Project settings > Your apps.");
-                } else {
-                    showMessage(`Failed to connect to Firebase. Error: ${error.message}`);
-                }
-                userIdEl.textContent = 'Error';
-                statusEl.textContent = 'Connection Failed';
-                statusEl.classList.remove('text-green-600');
-                statusEl.classList.add('text-red-600');
+                console.error("Error initializing Firebase app:", error);
+                showMessage("Failed to initialize the application. Please try again later.", 5000);
+                window.toggleLoading(false);
+                throw error;
             }
         }
-    
-        // Listen for real-time changes to the options list
-        function listenForOptions() {
-            if (!db) {
-                console.error("Firestore database is not initialized.");
+
+        /**
+         * Sets up real-time listeners for options and submissions from Firestore.
+         */
+        function setupFirestoreListeners() {
+            if (!window.db || !window.isAuthReady) {
+                console.warn("Firestore not ready for listeners.");
                 return;
             }
-            const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'options_list');
+
+            let initialOptionsLoaded = false;
+            let initialSubmissionsLoaded = false;
+
+            const checkAllInitialLoaded = () => {
+                if (initialOptionsLoaded && initialSubmissionsLoaded) {
+                    window.toggleLoading(false);
+                }
+            };
+
+            const optionsDocRef = doc(window.db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
+
             onSnapshot(optionsDocRef, (docSnap) => {
                 if (docSnap.exists()) {
-                    currentOptions = docSnap.data().options || [];
+                    const data = docSnap.data();
+                    const newOptions = data.options || [];
+                    if (JSON.stringify(newOptions) !== JSON.stringify(window.OPTIONS)) {
+                        window.OPTIONS = newOptions;
+                        console.log("Options updated from Firestore:", window.OPTIONS);
+                        window.renderOptionInputFields();
+                        window.initializeRankingInputs();
+                        window.renderGroupRanking();
+                        window.renderAllSubmissions();
+                    }
                 } else {
-                    currentOptions = [];
+                    window.OPTIONS = [];
+                    window.renderOptionInputFields();
+                    window.initializeRankingInputs();
+                    window.renderGroupRanking();
+                    window.renderAllSubmissions();
+                    console.log("No options document found in Firestore. Initializing empty.");
                 }
-                renderOptionsList(currentOptions);
-                renderDraggableList();
-                
-                if (currentOptions.length > 0) {
-                    rankingSection.classList.remove('hidden');
-                } else {
-                    rankingSection.classList.add('hidden');
-                }
+                initialOptionsLoaded = true;
+                checkAllInitialLoaded();
             }, (error) => {
-                console.error("Error listening for options:", error);
-                showMessage(`Error getting options data: ${error.message}`);
+                console.error("Error listening to options:", error);
+                showMessage("Failed to load options in real-time.", 5000);
+                initialOptionsLoaded = true;
+                checkAllInitialLoaded();
             });
-        }
-    
-        // Listen for real-time changes to the submission data
-        function listenForSubmissions() {
-            if (!db) {
-                console.error("Firestore database is not initialized.");
-                return;
-            }
-            const submissionsCollRef = collection(db, `artifacts/${appId}/public/data/ranking_submissions`);
-            onSnapshot(submissionsCollRef, (querySnap) => {
-                allSubmissions = {};
-                querySnap.forEach((doc) => {
-                    allSubmissions[doc.id] = doc.data();
+
+            const submissionsColRef = collection(window.db, `artifacts/${appId}/public/data/ranking_submissions`);
+
+            onSnapshot(submissionsColRef, (snapshot) => {
+                const newSubmissions = [];
+                snapshot.forEach(doc => {
+                    newSubmissions.push({ id: doc.id, ...doc.data() });
                 });
-                renderResultsTable();
-                resultsSection.classList.remove('hidden');
+                if (JSON.stringify(newSubmissions) !== JSON.stringify(window.allSubmissions)) {
+                    window.allSubmissions = newSubmissions;
+                    console.log("Submissions updated from Firestore:", window.allSubmissions);
+                    window.renderGroupRanking();
+                    window.renderAllSubmissions();
+                }
+                initialSubmissionsLoaded = true;
+                checkAllInitialLoaded();
             }, (error) => {
-                console.error("Error listening for submissions:", error);
-                showMessage(`Error getting submissions data: ${error.message}`);
+                console.error("Error listening to submissions:", error);
+                showMessage("Failed to load submissions in real-time.", 5000);
+                initialSubmissionsLoaded = true;
+                checkAllInitialLoaded();
             });
         }
-    
-        // --- Event Listeners and Logic ---
-    
-        addOptionBtn.addEventListener('click', async () => {
-            if (!userId) {
-                showMessage("Authentication Required", "Please wait for authentication to complete before adding options.");
-                return;
+
+        // Expose functions to the global scope for access from the main script
+        window.appId = appId;
+        window.initializeFirebase = initializeFirebase;
+        window.db = db;
+        window.auth = auth;
+        window.currentUserId = currentUserId;
+        window.isAuthReady = isAuthReady;
+    </script>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">Loading...</div>
+
+    <div class="container">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-4">Interactive Group Ranking Model</h1>
+        <p id="userIdDisplay" class="text-sm text-center text-gray-600 mb-4">Your User ID: Loading...</p>
+
+        <div id="messageBox" class="message-box"></div>
+
+        <!-- Define Options Section -->
+        <div class="p-6 bg-yellow-50 rounded-lg shadow-inner">
+            <div class="section-title">Define Ranking Options</div>
+            <div id="optionsInputFields" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+            </div>
+            <div class="flex gap-4">
+                <button id="setOptionsBtn" class="btn-primary bg-yellow-600 hover:bg-yellow-700">Set Options</button>
+            </div>
+        </div>
+
+        <!-- Participant Input Section -->
+        <div class="p-6 bg-blue-50 rounded-lg shadow-inner">
+            <div class="section-title">Submit Your Ranks</div>
+            <div class="input-group mb-4">
+                <label for="participantName">Your Name:</label>
+                <input type="text" id="participantName" placeholder="Enter your name" class="rounded-md focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div id="rankingInputs" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+            </div>
+            <button id="submitRanksBtn" class="btn-primary">Submit Ranks</button>
+        </div>
+
+        <!-- Group Ranking Results Section -->
+        <div class="p-6 bg-green-50 rounded-lg shadow-inner">
+            <div class="flex justify-between items-center mb-4">
+                <div class="section-title mb-0">Group Ranking Results</div>
+                <button id="printResultsBtn" class="btn-primary bg-gray-500 hover:bg-gray-600">Print Results</button>
+            </div>
+            <div class="table-container">
+                <table id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>Overall Rank</th>
+                            <th>Option</th>
+                            <th>Total Score</th>
+                            <th>Average Score</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- All Participants' Submissions (for transparency) -->
+        <div class="p-6 bg-purple-50 rounded-lg shadow-inner">
+            <div class="section-title">All Participant Submissions</div>
+            <div class="table-container">
+                <table id="submissionsTable">
+                    <thead>
+                        <tr>
+                            <th>Participant</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Company Management Section -->
+        <div class="p-6 bg-pink-50 rounded-lg shadow-inner">
+            <div class="section-title">Archive & Reset</div>
+            <p class="text-gray-600 mb-4">Provide a name to save the current results and start a new ranking session.</p>
+            <div class="input-group mb-4">
+                <label for="companyName">Company/Project Name:</label>
+                <input type="text" id="companyName" placeholder="e.g., 'Q3 Marketing Review'" class="rounded-md focus:ring-pink-500 focus:border-pink-500">
+            </div>
+            <button id="archiveAndResetBtn" class="btn-primary bg-pink-600 hover:bg-pink-700">Archive & Reset</button>
+        </div>
+    </div>
+
+    <script type="module">
+        import { doc, setDoc, addDoc, collection, query, where, getDocs, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        window.OPTIONS = [];
+        const MAX_OPTIONS = 15;
+        window.allSubmissions = [];
+
+        const loadingOverlay = document.getElementById('loadingOverlay');
+        const optionsInputFieldsDiv = document.getElementById('optionsInputFields');
+        const setOptionsBtn = document.getElementById('setOptionsBtn');
+        const participantNameInput = document.getElementById('participantName');
+        const rankingInputsDiv = document.getElementById('rankingInputs');
+        const submitRanksBtn = document.getElementById('submitRanksBtn');
+        const resultsTableBody = document.querySelector('#resultsTable tbody');
+        const submissionsTableHead = document.querySelector('#submissionsTable thead tr');
+        const submissionsTableBody = document.querySelector('#submissionsTable tbody');
+        const messageBox = document.getElementById('messageBox');
+        const printResultsBtn = document.getElementById('printResultsBtn');
+        const companyNameInput = document.getElementById('companyName');
+        const archiveAndResetBtn = document.getElementById('archiveAndResetBtn');
+
+        function showMessage(message, duration = 3000) {
+            messageBox.textContent = message;
+            messageBox.classList.add('show');
+            setTimeout(() => {
+                messageBox.classList.remove('show');
+            }, duration);
+        }
+
+        window.toggleLoading = function(show) {
+            if (show) {
+                loadingOverlay.classList.add('show');
+            } else {
+                loadingOverlay.classList.remove('show');
             }
-            const newOption = optionInput.value.trim();
-            if (newOption && !currentOptions.includes(newOption)) {
-                const updatedOptions = [...currentOptions, newOption];
-                const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'options_list');
-                try {
-                    await setDoc(optionsDocRef, { options: updatedOptions, timestamp: serverTimestamp() });
-                    optionInput.value = '';
-                } catch (e) {
-                    showMessage("Failed to add option. Check your internet connection and security rules.");
-                    console.error("Error adding document: ", e);
+        };
+
+        window.renderOptionInputFields = function() {
+            optionsInputFieldsDiv.innerHTML = '';
+            for (let i = 0; i < MAX_OPTIONS; i++) {
+                const inputGroup = document.createElement('div');
+                inputGroup.className = 'input-group';
+                inputGroup.innerHTML = `
+                    <label for="option${i + 1}">Option ${i + 1}:</label>
+                    <input type="text" id="option${i + 1}" placeholder="Enter option name" class="rounded-md focus:ring-yellow-500 focus:border-yellow-500">
+                `;
+                optionsInputFieldsDiv.appendChild(inputGroup);
+            }
+            window.OPTIONS.forEach((option, index) => {
+                const inputField = document.getElementById(`option${index + 1}`);
+                if (inputField) {
+                    inputField.value = option;
                 }
-            } else if (currentOptions.includes(newOption)) {
-                showMessage("This option already exists. Please enter a unique one.");
-            }
-        });
-    
-        clearAllBtn.addEventListener('click', async () => {
-             if (!userId) {
-                showMessage("Authentication Required", "Please wait for authentication to complete before clearing options.");
+            });
+        };
+
+        async function setOptionsFromInput() {
+            if (!window.isAuthReady) {
+                showMessage("Application is still loading. Please wait.", 3000);
                 return;
             }
-            showMessage("Are you sure you want to clear all ranking options? This action cannot be undone.");
-            const tempConfirmListener = async () => {
-                messageCloseBtn.removeEventListener('click', tempConfirmListener);
-                try {
-                    const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'options_list');
-                    await setDoc(optionsDocRef, { options: [], timestamp: serverTimestamp() });
-                } catch (e) {
-                    showMessage("Failed to clear options. Check your internet connection and security rules.");
-                    console.error("Error clearing options: ", e);
-                }
-            };
-            messageCloseBtn.addEventListener('click', tempConfirmListener);
-        });
-    
-        optionsList.addEventListener('click', async (event) => {
-            if (!userId) {
-                showMessage("Authentication Required", "Please wait for authentication to complete before removing options.");
-                return;
-            }
-            if (event.target.classList.contains('remove-option-btn')) {
-                const optionToRemove = event.target.dataset.option;
-                const updatedOptions = currentOptions.filter(option => option !== optionToRemove);
-                const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'options_list');
-                try {
-                    await setDoc(optionsDocRef, { options: updatedOptions, timestamp: serverTimestamp() });
-                } catch (e) {
-                    showMessage("Failed to remove option. Check your internet connection and security rules.");
-                    console.error("Error removing option: ", e);
-                }
-            }
-        });
-    
-        submitBtn.addEventListener('click', async () => {
-            if (!userId) {
-                showMessage("Authentication Required", "Please wait for authentication to complete before submitting.");
-                return;
-            }
-            const rankings = Array.from(draggableContainer.children).map(item => item.dataset.option);
-            const submissionData = {
-                userId: userId,
-                rankings: rankings,
-                timestamp: serverTimestamp()
-            };
-    
-            const submissionDocRef = doc(db, `artifacts/${appId}/public/data/ranking_submissions`, userId);
+            window.toggleLoading(true);
             try {
-                await setDoc(submissionDocRef, submissionData);
-                showMessage("Success! Your ranking has been submitted. The results table will update in real-time for everyone.");
-            } catch (e) {
-                showMessage("Failed to submit ranking. Check your internet connection and security rules.");
-                console.error("Error adding document: ", e);
+                const newOptions = [];
+                for (let i = 0; i < MAX_OPTIONS; i++) {
+                    const inputField = document.getElementById(`option${i + 1}`);
+                    if (inputField && inputField.value.trim() !== '') {
+                        newOptions.push(inputField.value.trim());
+                    }
+                }
+
+                if (newOptions.length === 0) {
+                    showMessage("Please enter at least one option.");
+                    window.toggleLoading(false);
+                    return;
+                }
+
+                const uniqueOptions = new Set(newOptions.map(opt => opt.toLowerCase()));
+                if (uniqueOptions.size !== newOptions.length) {
+                    showMessage("Duplicate option names detected. Please ensure all options are unique.");
+                    window.toggleLoading(false);
+                    return;
+                }
+                
+                const optionsDocRef = doc(window.db, `artifacts/${window.appId}/public/data/ranking_options`, 'current_options');
+                await setDoc(optionsDocRef, { options: newOptions, lastUpdated: new Date() });
+
+                showMessage("Options updated successfully!");
+                await clearAllSubmissions();
+
+            } catch (error) {
+                console.error("Error setting options:", error);
+                showMessage("Failed to set options. Please try again.", 5000);
+            } finally {
+                // Loading overlay will be hidden by the listener
             }
+        }
+
+        async function clearAllSubmissions() {
+             if (!window.isAuthReady) {
+                showMessage("Application is still loading. Please wait.", 3000);
+                return;
+            }
+            window.toggleLoading(true);
+            try {
+                const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
+                const q = query(submissionsColRef);
+                const querySnapshot = await getDocs(q);
+
+                const deletePromises = [];
+                querySnapshot.forEach((doc) => {
+                    deletePromises.push(deleteDoc(doc.ref));
+                });
+                await Promise.all(deletePromises);
+                console.log("All submissions cleared from Firestore.");
+                showMessage("All submissions cleared.", 3000);
+            } catch (error) {
+                console.error("Error clearing submissions:", error);
+                showMessage("Failed to clear submissions. Please try again.", 5000);
+            } finally {
+                // Loading overlay will be hidden by the listener
+            }
+        }
+        
+        /**
+         * NEW: Archives the current options and submissions, then resets the session.
+         */
+        async function archiveAndReset() {
+            if (!window.isAuthReady) {
+                showMessage("Application is still loading. Please wait.", 3000);
+                return;
+            }
+            window.toggleLoading(true);
+            
+            const companyName = companyNameInput.value.trim();
+            if (!companyName) {
+                showMessage("Please enter a company or project name to archive the results.", 5000);
+                window.toggleLoading(false);
+                return;
+            }
+
+            try {
+                await runTransaction(window.db, async (transaction) => {
+                    // Get current options and submissions
+                    const optionsDocRef = doc(window.db, `artifacts/${window.appId}/public/data/ranking_options`, 'current_options');
+                    const optionsSnap = await transaction.get(optionsDocRef);
+                    const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
+                    const submissionsSnap = await getDocs(submissionsColRef);
+
+                    // Check for existing data
+                    if (!optionsSnap.exists() && submissionsSnap.empty) {
+                        showMessage("There is no data to archive. Resetting session...", 3000);
+                        return;
+                    }
+
+                    // Archive the data
+                    const archiveSessionId = companyName + '_' + new Date().getTime();
+                    const archiveDocRef = doc(window.db, `artifacts/${window.appId}/public/data/archived_sessions`, archiveSessionId);
+                    
+                    const archivedData = {
+                        company: companyName,
+                        options: optionsSnap.exists() ? optionsSnap.data().options : [],
+                        timestamp: new Date()
+                    };
+                    transaction.set(archiveDocRef, archivedData);
+
+                    // Archive submissions as a subcollection
+                    const archivedSubmissionsColRef = collection(archiveDocRef, 'submissions');
+                    submissionsSnap.forEach(submissionDoc => {
+                        transaction.set(doc(archivedSubmissionsColRef, submissionDoc.id), submissionDoc.data());
+                    });
+
+                    // Clear active session data
+                    transaction.set(optionsDocRef, { options: [] });
+                    submissionsSnap.forEach(submissionDoc => {
+                        transaction.delete(submissionDoc.ref);
+                    });
+                });
+                
+                showMessage(`Results for '${companyName}' have been archived and the session has been reset!`);
+                companyNameInput.value = ''; // Clear the input field for the next session
+
+            } catch (e) {
+                console.error("Transaction failed: ", e);
+                showMessage("Failed to archive and reset the session. Please try again.", 5000);
+            } finally {
+                // Loading overlay will be hidden by the listeners
+            }
+        }
+
+
+        window.initializeRankingInputs = function() {
+            rankingInputsDiv.innerHTML = '';
+            if (window.OPTIONS.length === 0) {
+                rankingInputsDiv.innerHTML = '<p class="text-gray-600">Please define options in the "Define Ranking Options" section first.</p>';
+                return;
+            }
+            window.OPTIONS.forEach(option => {
+                const inputGroup = document.createElement('div');
+                inputGroup.className = 'input-group';
+                const safeId = encodeURIComponent(option).replace(/%/g, '_');
+                inputGroup.innerHTML = `
+                    <label for="${safeId}">${option}:</label>
+                    <select id="${safeId}" class="rounded-md focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Select Rank</option>
+                        ${window.OPTIONS.map((_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('')}
+                    </select>
+                `;
+                rankingInputsDiv.appendChild(inputGroup);
+            });
+        };
+
+        function calculateGroupRanking() {
+            const optionScores = {};
+            window.OPTIONS.forEach(option => {
+                optionScores[option] = 0;
+            });
+
+            window.allSubmissions.forEach(submission => {
+                window.OPTIONS.forEach(option => {
+                    const rank = submission.ranks[option];
+                    if (rank) {
+                        optionScores[option] += (window.OPTIONS.length - rank + 1);
+                    }
+                });
+            });
+
+            let rankedOptions = Object.keys(optionScores).map(option => {
+                const totalScore = optionScores[option];
+                const numberOfParticipants = window.allSubmissions.length;
+                const averageScore = numberOfParticipants > 0 ? (totalScore / numberOfParticipants) : 0;
+                return {
+                    option: option,
+                    score: totalScore,
+                    averageScore: parseFloat(averageScore.toFixed(2))
+                };
+            });
+
+            rankedOptions.sort((a, b) => b.score - a.score);
+
+            rankedOptions.forEach((item, index) => {
+                if (index > 0 && item.score === rankedOptions[index - 1].score) {
+                    item.rank = rankedOptions[index - 1].rank;
+                } else {
+                    item.rank = index + 1;
+                }
+            });
+            return rankedOptions;
+        }
+
+        window.renderGroupRanking = function() {
+            const rankedOptions = calculateGroupRanking();
+            resultsTableBody.innerHTML = '';
+
+            if (window.allSubmissions.length === 0) {
+                resultsTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No submissions yet. Be the first!</td></tr>`;
+                return;
+            }
+
+            rankedOptions.forEach(item => {
+                const row = resultsTableBody.insertRow();
+                row.innerHTML = `
+                    <td class="font-bold text-blue-700">${item.rank}</td>
+                    <td>${item.option}</td>
+                    <td>${item.score}</td>
+                    <td>${item.averageScore}</td>
+                `;
+            });
+        };
+
+        window.renderAllSubmissions = function() {
+            submissionsTableHead.innerHTML = '<th>Participant</th>';
+            submissionsTableBody.innerHTML = '';
+
+            window.OPTIONS.forEach(option => {
+                const th = document.createElement('th');
+                th.textContent = option;
+                submissionsTableHead.appendChild(th);
+            });
+
+            if (window.allSubmissions.length === 0) {
+                submissionsTableBody.innerHTML = `<tr><td colspan="${window.OPTIONS.length + 1}" class="text-center text-gray-500">No submissions yet.</td></tr>`;
+                return;
+            }
+
+            window.allSubmissions.forEach(submission => {
+                const row = submissionsTableBody.insertRow();
+                const participantCell = row.insertCell();
+                participantCell.textContent = submission.name;
+
+                window.OPTIONS.forEach(option => {
+                    const rankCell = row.insertCell();
+                    rankCell.textContent = submission.ranks[option] || '-';
+                });
+            });
+        };
+
+        async function handleSubmitRanks() {
+            if (!window.isAuthReady) {
+                showMessage("Application is still loading. Please wait.", 3000);
+                return;
+            }
+            if (window.OPTIONS.length === 0) {
+                showMessage("Please define options in the 'Define Ranking Options' section first.");
+                return;
+            }
+
+            const participantName = participantNameInput.value.trim();
+            if (!participantName) {
+                showMessage("Please enter your name.");
+                return;
+            }
+
+            const currentRanks = {};
+            const selectedRanks = new Set();
+            let allRanked = true;
+
+            window.OPTIONS.forEach(option => {
+                const safeId = encodeURIComponent(option).replace(/%/g, '_');
+                const selectElement = document.getElementById(safeId);
+
+                if (!selectElement) {
+                    allRanked = false;
+                    return;
+                }
+                const rank = selectElement.value;
+                if (!rank) {
+                    allRanked = false;
+                } else if (selectedRanks.has(rank)) {
+                    showMessage(`Duplicate rank '${rank}' detected. Each option must have a unique rank.`);
+                    allRanked = false;
+                    return;
+                } else {
+                    currentRanks[option] = parseInt(rank);
+                    selectedRanks.add(rank);
+                }
+            });
+
+            if (!allRanked) {
+                if (selectedRanks.size !== window.OPTIONS.length) {
+                     showMessage("Please rank all options uniquely.");
+                }
+                return;
+            }
+
+            window.toggleLoading(true);
+            try {
+                const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
+
+                const q = query(submissionsColRef, where("name", "==", participantName));
+                const querySnapshot = await getDocs(q);
+
+                if (!querySnapshot.empty) {
+                    const docToUpdate = querySnapshot.docs[0];
+                    await setDoc(doc(submissionsColRef, docToUpdate.id), {
+                        name: participantName,
+                        ranks: currentRanks,
+                        timestamp: new Date()
+                    });
+                    showMessage(`Updated ranks for ${participantName}!`);
+                } else {
+                    await addDoc(submissionsColRef, {
+                        name: participantName,
+                        ranks: currentRanks,
+                        timestamp: new Date()
+                    });
+                    showMessage(`Thanks, ${participantName}! Your ranks have been submitted.`);
+                }
+            } catch (error) {
+                console.error("Error submitting ranks:", error);
+                showMessage("Failed to submit ranks. Please try again.", 5000);
+            } finally {
+                participantNameInput.value = '';
+                window.initializeRankingInputs();
+                window.toggleLoading(false); // Hide loading after submission is processed
+            }
+        }
+
+        // Event Listeners
+        setOptionsBtn.addEventListener('click', setOptionsFromInput);
+        submitRanksBtn.addEventListener('click', handleSubmitRanks);
+        printResultsBtn.addEventListener('click', () => {
+            window.print();
         });
-    
-        window.onload = () => {
-            initializeFirebase();
+        archiveAndResetBtn.addEventListener('click', archiveAndReset);
+
+        // Initial setup on page load
+        window.onload = async function() {
+            window.toggleLoading(true);
+            try {
+                await window.initializeFirebase();
+            } catch (error) {
+                console.error("Application startup failed:", error);
+                showMessage("Failed to start the application. Check console for details.", 5000);
+                window.toggleLoading(false);
+            }
         };
     </script>
 </body>
