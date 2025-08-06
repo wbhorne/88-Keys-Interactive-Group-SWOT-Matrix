@@ -110,14 +110,22 @@
     <script type="module">
         // Firebase SDK imports
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setDoc, onSnapshot, collection, query, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
     
-        // Global variables provided by the Canvas environment
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfigString = typeof __firebase_config !== 'undefined' ? __firebase_config : '{}';
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-    
+        // ------------------------------------------------------------------------------------------------
+        // IMPORTANT: You MUST replace the placeholder firebaseConfig object below with your project's 
+        // configuration from the Firebase console. You can find this in Project Settings > Your apps.
+        // ------------------------------------------------------------------------------------------------
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+        
         // --- DOM Elements ---
         const userIdEl = document.getElementById('userId');
         const statusEl = document.getElementById('status');
@@ -148,9 +156,7 @@
     
         // Custom modal function to display messages to the user.
         // This replaces alert() and confirm() as they are not available in the Canvas environment.
-        function showMessage(title, message) {
-            const modalTitle = document.getElementById('messageModalTitle');
-            if (modalTitle) modalTitle.textContent = title;
+        function showMessage(message) {
             messageContent.textContent = message;
             messageModal.classList.add('show');
         }
@@ -323,24 +329,23 @@
         // --- Firebase Functions ---
         async function initializeFirebase() {
             try {
-                // Ensure the Firebase config is valid JSON and not empty
-                const firebaseConfig = JSON.parse(firebaseConfigString);
-                
-                // If firebaseConfig is empty, show a specific error
-                if (Object.keys(firebaseConfig).length === 0 || !firebaseConfig.projectId) {
-                    throw new Error("Firebase configuration is missing or invalid. Please ensure __firebase_config is provided.");
+                // Check if the placeholder config is still in use.
+                if (firebaseConfig.projectId === "YOUR_PROJECT_ID") {
+                    console.warn("Firebase configuration is using placeholder values. Please update the firebaseConfig object with your project's details.");
+                    showMessage("Your Firebase configuration is missing. Please replace the placeholder values in the 'firebaseConfig' object within the code with your actual project details from the Firebase console.");
+                    userIdEl.textContent = 'Error';
+                    statusEl.textContent = 'Configuration Missing';
+                    statusEl.classList.remove('text-green-600');
+                    statusEl.classList.add('text-red-600');
+                    return; // Exit the function to prevent further errors
                 }
     
                 app = initializeApp(firebaseConfig);
                 auth = getAuth(app);
                 db = getFirestore(app);
                 
-                // Sign in the user, either with a custom token or anonymously
-                if (initialAuthToken) {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                } else {
-                    await signInAnonymously(auth);
-                }
+                // Sign in the user anonymously for public access
+                await signInAnonymously(auth);
                 
                 // Update UI after successful auth
                 onAuthStateChanged(auth, (user) => {
@@ -364,7 +369,7 @@
     
             } catch (error) {
                 console.error("Error initializing Firebase:", error);
-                showMessage("Connection Error", `Failed to connect to Firebase. Please check your project configuration and security rules. Error: ${error.message}`);
+                showMessage(`Failed to connect to Firebase. Please check your project configuration and security rules. Error: ${error.message}`);
                 userIdEl.textContent = 'Error';
                 statusEl.textContent = 'Connection Failed';
                 statusEl.classList.remove('text-green-600');
@@ -374,7 +379,7 @@
     
         // Listen for real-time changes to the options list
         function listenForOptions() {
-            const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
+            const optionsDocRef = doc(db, `ranking_data/ranking_options`, 'current_options');
             onSnapshot(optionsDocRef, (docSnap) => {
                 if (docSnap.exists()) {
                     currentOptions = docSnap.data().options || [];
@@ -397,7 +402,7 @@
     
         // Listen for real-time changes to the submission data
         function listenForSubmissions() {
-            const submissionsCollRef = collection(db, `artifacts/${appId}/public/data/ranking_submissions`);
+            const submissionsCollRef = collection(db, `ranking_data/ranking_submissions`);
             onSnapshot(submissionsCollRef, (querySnap) => {
                 allSubmissions = {};
                 querySnap.forEach((doc) => {
@@ -423,16 +428,16 @@
             const newOption = optionInput.value.trim();
             if (newOption && !currentOptions.includes(newOption)) {
                 const updatedOptions = [...currentOptions, newOption];
-                const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
+                const optionsDocRef = doc(db, `ranking_data/ranking_options`, 'current_options');
                 try {
                     await setDoc(optionsDocRef, { options: updatedOptions, timestamp: serverTimestamp() });
                     optionInput.value = ''; // Clear input
                 } catch (e) {
-                    showMessage("Database Error", "Failed to add option. Check your internet connection and security rules.");
+                    showMessage("Failed to add option. Check your internet connection and security rules.");
                     console.error("Error adding document: ", e);
                 }
             } else if (currentOptions.includes(newOption)) {
-                showMessage("Duplicate Option", "This option already exists. Please enter a unique one.");
+                showMessage("This option already exists. Please enter a unique one.");
             }
         });
     
@@ -443,17 +448,17 @@
                 return;
             }
             // Ask for a confirmation before clearing.
-            showMessage("Confirmation", "Are you sure you want to clear all ranking options? This action cannot be undone.");
+            showMessage("Are you sure you want to clear all ranking options? This action cannot be undone.");
     
             // We'll add a temporary listener to the modal's close button to handle the confirmation.
             // This is a simple pattern for a "confirm" modal.
             const tempConfirmListener = async () => {
                 messageCloseBtn.removeEventListener('click', tempConfirmListener);
                 try {
-                    const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
+                    const optionsDocRef = doc(db, `ranking_data/ranking_options`, 'current_options');
                     await setDoc(optionsDocRef, { options: [], timestamp: serverTimestamp() });
                 } catch (e) {
-                    showMessage("Database Error", "Failed to clear options. Check your internet connection and security rules.");
+                    showMessage("Failed to clear options. Check your internet connection and security rules.");
                     console.error("Error clearing options: ", e);
                 }
             };
@@ -469,11 +474,11 @@
             if (event.target.classList.contains('remove-option-btn')) {
                 const optionToRemove = event.target.dataset.option;
                 const updatedOptions = currentOptions.filter(option => option !== optionToRemove);
-                const optionsDocRef = doc(db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
+                const optionsDocRef = doc(db, `ranking_data/ranking_options`, 'current_options');
                 try {
                     await setDoc(optionsDocRef, { options: updatedOptions, timestamp: serverTimestamp() });
                 } catch (e) {
-                    showMessage("Database Error", "Failed to remove option. Check your internet connection and security rules.");
+                    showMessage("Failed to remove option. Check your internet connection and security rules.");
                     console.error("Error removing option: ", e);
                 }
             }
@@ -493,12 +498,12 @@
             };
     
             // Create a new document for this user's submission
-            const submissionDocRef = doc(db, `artifacts/${appId}/public/data/ranking_submissions`, userId);
+            const submissionDocRef = doc(db, `ranking_data/ranking_submissions`, userId);
             try {
                 await setDoc(submissionDocRef, submissionData);
-                showMessage("Success!", "Your ranking has been submitted. The results table will update in real-time for everyone.");
+                showMessage("Success! Your ranking has been submitted. The results table will update in real-time for everyone.");
             } catch (e) {
-                showMessage("Database Error", "Failed to submit ranking. Check your internet connection and security rules.");
+                showMessage("Failed to submit ranking. Check your internet connection and security rules.");
                 console.error("Error adding document: ", e);
             }
         });
