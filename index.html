@@ -127,7 +127,13 @@
         .loading-overlay.show {
             display: flex;
         }
-
+        /* Style for the User ID display */
+        #userIdDisplay {
+            text-align: right;
+            font-size: 0.875rem;
+            color: #718096;
+            padding-bottom: 1rem;
+        }
         /* --- Print-specific styles --- */
         @media print {
             body {
@@ -166,11 +172,16 @@
         window.auth = null;
         window.currentUserId = null;
         window.isAuthReady = false; // Flag to indicate auth state is determined
+        window.OPTIONS = [];
+        const MAX_OPTIONS = 15;
+        window.allSubmissions = [];
 
         // Provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        let loadingOverlay, optionsInputFieldsDiv, setOptionsBtn, participantNameInput, rankingInputsDiv, submitRanksBtn, resultsTableBody, submissionsTableHead, submissionsTableBody, messageBox, printResultsBtn, downloadHtmlBtn, companyNameInput, archiveAndResetBtn;
 
         /**
          * Initializes Firebase and sets up authentication.
@@ -187,7 +198,10 @@
                     console.log("onAuthStateChanged fired. User:", user);
                     if (user) {
                         window.currentUserId = user.uid;
-                        document.getElementById('userIdDisplay').textContent = `Your User ID: ${window.currentUserId}`;
+                        const userIdDisplay = document.getElementById('userIdDisplay');
+                        if (userIdDisplay) {
+                            userIdDisplay.textContent = `Your User ID: ${window.currentUserId}`;
+                        }
                         window.isAuthReady = true;
                         console.log("Firebase Auth Ready. User ID:", window.currentUserId);
                         setupFirestoreListeners(); // Setup listeners once authenticated
@@ -300,22 +314,29 @@
         window.isAuthReady = isAuthReady;
 
         function showMessage(message, duration = 3000) {
-            messageBox.textContent = message;
-            messageBox.classList.add('show');
-            setTimeout(() => {
-                messageBox.classList.remove('show');
-            }, duration);
+            if (messageBox) {
+                messageBox.textContent = message;
+                messageBox.classList.add('show');
+                setTimeout(() => {
+                    if (messageBox) { // Add a check here as well
+                       messageBox.classList.remove('show');
+                    }
+                }, duration);
+            }
         }
 
         window.toggleLoading = function(show) {
-            if (show) {
-                loadingOverlay.classList.add('show');
-            } else {
-                loadingOverlay.classList.remove('show');
+            if (loadingOverlay) {
+                if (show) {
+                    loadingOverlay.classList.add('show');
+                } else {
+                    loadingOverlay.classList.remove('show');
+                }
             }
         };
 
         window.renderOptionInputFields = function() {
+            if (!optionsInputFieldsDiv) return;
             optionsInputFieldsDiv.innerHTML = '';
             for (let i = 0; i < MAX_OPTIONS; i++) {
                 const inputGroup = document.createElement('div');
@@ -458,7 +479,7 @@
                 });
 
                 showMessage(`Results for '${companyName}' have been archived and the session has been reset!`);
-                companyNameInput.value = ''; // Clear the input field for the next session
+                if (companyNameInput) companyNameInput.value = ''; // Clear the input field for the next session
 
             } catch (e) {
                 console.error("Transaction failed: ", e);
@@ -470,6 +491,7 @@
 
 
         window.initializeRankingInputs = function() {
+            if (!rankingInputsDiv) return;
             rankingInputsDiv.innerHTML = '';
             if (window.OPTIONS.length === 0) {
                 rankingInputsDiv.innerHTML = '<p class="text-gray-600">Please define options in the "Define Ranking Options" section first.</p>';
@@ -529,6 +551,7 @@
         }
 
         window.renderGroupRanking = function() {
+            if (!resultsTableBody) return;
             const rankedOptions = calculateGroupRanking();
             resultsTableBody.innerHTML = '';
 
@@ -549,6 +572,7 @@
         };
 
         window.renderAllSubmissions = function() {
+            if (!submissionsTableHead || !submissionsTableBody) return;
             submissionsTableHead.innerHTML = '<th>Participant</th>';
             submissionsTableBody.innerHTML = '';
 
@@ -650,581 +674,9 @@
                 console.error("Error submitting ranks:", error);
                 showMessage("Failed to submit ranks. Please try again.", 5000);
             } finally {
-                participantNameInput.value = '';
+                if (participantNameInput) participantNameInput.value = '';
                 window.initializeRankingInputs();
                 window.toggleLoading(false);
-            }
-        }
-
-        /**
-         * Archives the current options and submissions, then resets the session.
-         */
-        async function archiveAndReset() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
-            window.toggleLoading(true);
-
-            const companyName = companyNameInput.value.trim();
-            if (!companyName) {
-                showMessage("Please enter a company or project name to archive the results.", 5000);
-                window.toggleLoading(false);
-                return;
-            }
-
-            try {
-                await runTransaction(window.db, async (transaction) => {
-                    // Get current options and submissions
-                    const optionsDocRef = doc(window.db, `artifacts/${window.appId}/public/data/ranking_options`, 'current_options');
-                    const optionsSnap = await transaction.get(optionsDocRef);
-                    const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
-                    const submissionsSnap = await getDocs(submissionsColRef);
-
-                    // Check for existing data
-                    if (!optionsSnap.exists() && submissionsSnap.empty) {
-                        showMessage("There is no data to archive. Resetting session...", 3000);
-                        return;
-                    }
-
-                    // Archive the data
-                    const archiveSessionId = companyName + '_' + new Date().getTime();
-                    const archiveDocRef = doc(window.db, `artifacts/${window.appId}/public/data/archived_sessions`, archiveSessionId);
-
-                    const archivedData = {
-                        company: companyName,
-                        options: optionsSnap.exists() ? optionsSnap.data().options : [],
-                        timestamp: new Date()
-                    };
-                    transaction.set(archiveDocRef, archivedData);
-
-                    // Archive submissions as a subcollection
-                    const archivedSubmissionsColRef = collection(archiveDocRef, 'submissions');
-                    submissionsSnap.forEach(submissionDoc => {
-                        transaction.set(doc(archivedSubmissionsColRef, submissionDoc.id), submissionDoc.data());
-                    });
-
-                    // Clear active session data
-                    transaction.set(optionsDocRef, { options: [] });
-                    submissionsSnap.forEach(submissionDoc => {
-                        transaction.delete(submissionDoc.ref);
-                    });
-                });
-
-                showMessage(`Results for '${companyName}' have been archived and the session has been reset!`);
-                companyNameInput.value = ''; // Clear the input field for the next session
-
-            } catch (e) {
-                console.error("Transaction failed: ", e);
-                showMessage("Failed to archive and reset the session. Please try again.", 5000);
-            } finally {
-                // Loading overlay will be hidden by the listeners
-            }
-        }
-
-        window.initializeRankingInputs = function() {
-            rankingInputsDiv.innerHTML = '';
-            if (window.OPTIONS.length === 0) {
-                rankingInputsDiv.innerHTML = '<p class="text-gray-600">Please define options in the "Define Ranking Options" section first.</p>';
-                return;
-            }
-            window.OPTIONS.forEach(option => {
-                const inputGroup = document.createElement('div');
-                inputGroup.className = 'input-group';
-                const safeId = encodeURIComponent(option).replace(/%/g, '_');
-                inputGroup.innerHTML = `
-                    <label for="${safeId}">${option}:</label>
-                    <select id="${safeId}" class="rounded-md focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">Select Rank</option>
-                        ${window.OPTIONS.map((_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('')}
-                    </select>
-                `;
-                rankingInputsDiv.appendChild(inputGroup);
-            });
-        };
-
-        function calculateGroupRanking() {
-            const optionScores = {};
-            window.OPTIONS.forEach(option => {
-                optionScores[option] = 0;
-            });
-
-            window.allSubmissions.forEach(submission => {
-                window.OPTIONS.forEach(option => {
-                    const rank = submission.ranks[option];
-                    if (rank) {
-                        optionScores[option] += (window.OPTIONS.length - rank + 1);
-                    }
-                });
-            });
-
-            let rankedOptions = Object.keys(optionScores).map(option => {
-                const totalScore = optionScores[option];
-                const numberOfParticipants = window.allSubmissions.length;
-                const averageScore = numberOfParticipants > 0 ? (totalScore / numberOfParticipants) : 0;
-                return {
-                    option: option,
-                    score: totalScore,
-                    averageScore: parseFloat(averageScore.toFixed(2))
-                };
-            });
-
-            rankedOptions.sort((a, b) => b.score - a.score);
-
-            rankedOptions.forEach((item, index) => {
-                if (index > 0 && item.score === rankedOptions[index - 1].score) {
-                    item.rank = rankedOptions[index - 1].rank;
-                } else {
-                    item.rank = index + 1;
-                }
-            });
-            return rankedOptions;
-        }
-
-        window.renderGroupRanking = function() {
-            const rankedOptions = calculateGroupRanking();
-            resultsTableBody.innerHTML = '';
-
-            if (window.allSubmissions.length === 0) {
-                resultsTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No submissions yet. Be the first!</td></tr>`;
-                return;
-            }
-
-            rankedOptions.forEach(item => {
-                const row = resultsTableBody.insertRow();
-                row.innerHTML = `
-                    <td class="font-bold text-blue-700">${item.rank}</td>
-                    <td>${item.option}</td>
-                    <td>${item.score}</td>
-                    <td>${item.averageScore}</td>
-                `;
-            });
-        };
-
-        window.renderAllSubmissions = function() {
-            submissionsTableHead.innerHTML = '<th>Participant</th>';
-            submissionsTableBody.innerHTML = '';
-
-            window.OPTIONS.forEach(option => {
-                const th = document.createElement('th');
-                th.textContent = option;
-                submissionsTableHead.appendChild(th);
-            });
-
-            if (window.allSubmissions.length === 0) {
-                submissionsTableBody.innerHTML = `<tr><td colspan="${window.OPTIONS.length + 1}" class="text-center text-gray-500">No submissions yet.</td></tr>`;
-                return;
-            }
-
-            window.allSubmissions.forEach(submission => {
-                const row = submissionsTableBody.insertRow();
-                const participantCell = row.insertCell();
-                participantCell.textContent = submission.name;
-
-                window.OPTIONS.forEach(option => {
-                    const rankCell = row.insertCell();
-                    rankCell.textContent = submission.ranks[option] || '-';
-                });
-            });
-        };
-
-        async function handleSubmitRanks() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
-            if (window.OPTIONS.length === 0) {
-                showMessage("Please define options in the 'Define Ranking Options' section first.");
-                return;
-            }
-
-            const participantName = participantNameInput.value.trim();
-            if (!participantName) {
-                showMessage("Please enter your name.");
-                return;
-            }
-
-            const currentRanks = {};
-            const selectedRanks = new Set();
-            let allRanked = true;
-
-            window.OPTIONS.forEach(option => {
-                const safeId = encodeURIComponent(option).replace(/%/g, '_');
-                const selectElement = document.getElementById(safeId);
-
-                if (!selectElement) {
-                    allRanked = false;
-                    return;
-                }
-                const rank = selectElement.value;
-                if (!rank) {
-                    allRanked = false;
-                } else if (selectedRanks.has(rank)) {
-                    showMessage(`Duplicate rank '${rank}' detected. Each option must have a unique rank.`);
-                    allRanked = false;
-                    return;
-                } else {
-                    currentRanks[option] = parseInt(rank);
-                    selectedRanks.add(rank);
-                }
-            });
-
-            if (!allRanked) {
-                if (selectedRanks.size !== window.OPTIONS.length) {
-                     showMessage("Please rank all options uniquely.");
-                }
-                return;
-            }
-
-            window.toggleLoading(true);
-            try {
-                const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
-
-                const q = query(submissionsColRef, where("name", "==", participantName));
-                const querySnapshot = await getDocs(q);
-
-                if (!querySnapshot.empty) {
-                    const docToUpdate = querySnapshot.docs[0];
-                    await setDoc(doc(submissionsColRef, docToUpdate.id), {
-                        name: participantName,
-                        ranks: currentRanks,
-                        timestamp: new Date()
-                    });
-                    showMessage(`Updated ranks for ${participantName}!`);
-                } else {
-                    await addDoc(submissionsColRef, {
-                        name: participantName,
-                        ranks: currentRanks,
-                        timestamp: new Date()
-                    });
-                    showMessage(`Thanks, ${participantName}! Your ranks have been submitted.`);
-                }
-            } catch (error) {
-                console.error("Error submitting ranks:", error);
-                showMessage("Failed to submit ranks. Please try again.", 5000);
-            } finally {
-                participantNameInput.value = '';
-                window.initializeRankingInputs();
-                window.toggleLoading(false);
-            }
-        }
-
-        /**
-         * Archives the current options and submissions, then resets the session.
-         */
-        async function archiveAndReset() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
-            window.toggleLoading(true);
-
-            const companyName = companyNameInput.value.trim();
-            if (!companyName) {
-                showMessage("Please enter a company or project name to archive the results.", 5000);
-                window.toggleLoading(false);
-                return;
-            }
-
-            try {
-                await runTransaction(window.db, async (transaction) => {
-                    // Get current options and submissions
-                    const optionsDocRef = doc(window.db, `artifacts/${window.appId}/public/data/ranking_options`, 'current_options');
-                    const optionsSnap = await transaction.get(optionsDocRef);
-                    const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
-                    const submissionsSnap = await getDocs(submissionsColRef);
-
-                    // Check for existing data
-                    if (!optionsSnap.exists() && submissionsSnap.empty) {
-                        showMessage("There is no data to archive. Resetting session...", 3000);
-                        return;
-                    }
-
-                    // Archive the data
-                    const archiveSessionId = companyName + '_' + new Date().getTime();
-                    const archiveDocRef = doc(window.db, `artifacts/${window.appId}/public/data/archived_sessions`, archiveSessionId);
-
-                    const archivedData = {
-                        company: companyName,
-                        options: optionsSnap.exists() ? optionsSnap.data().options : [],
-                        timestamp: new Date()
-                    };
-                    transaction.set(archiveDocRef, archivedData);
-
-                    // Archive submissions as a subcollection
-                    const archivedSubmissionsColRef = collection(archiveDocRef, 'submissions');
-                    submissionsSnap.forEach(submissionDoc => {
-                        transaction.set(doc(archivedSubmissionsColRef, submissionDoc.id), submissionDoc.data());
-                    });
-
-                    // Clear active session data
-                    transaction.set(optionsDocRef, { options: [] });
-                    submissionsSnap.forEach(submissionDoc => {
-                        transaction.delete(submissionDoc.ref);
-                    });
-                });
-
-                showMessage(`Results for '${companyName}' have been archived and the session has been reset!`);
-                companyNameInput.value = ''; // Clear the input field for the next session
-
-            } catch (e) {
-                console.error("Transaction failed: ", e);
-                showMessage("Failed to archive and reset the session. Please try again.", 5000);
-            } finally {
-                // Loading overlay will be hidden by the listeners
-            }
-        }
-
-        window.initializeRankingInputs = function() {
-            rankingInputsDiv.innerHTML = '';
-            if (window.OPTIONS.length === 0) {
-                rankingInputsDiv.innerHTML = '<p class="text-gray-600">Please define options in the "Define Ranking Options" section first.</p>';
-                return;
-            }
-            window.OPTIONS.forEach(option => {
-                const inputGroup = document.createElement('div');
-                inputGroup.className = 'input-group';
-                const safeId = encodeURIComponent(option).replace(/%/g, '_');
-                inputGroup.innerHTML = `
-                    <label for="${safeId}">${option}:</label>
-                    <select id="${safeId}" class="rounded-md focus:ring-blue-500 focus:border-blue-500">
-                        <option value="">Select Rank</option>
-                        ${window.OPTIONS.map((_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('')}
-                    </select>
-                `;
-                rankingInputsDiv.appendChild(inputGroup);
-            });
-        };
-
-        function calculateGroupRanking() {
-            const optionScores = {};
-            window.OPTIONS.forEach(option => {
-                optionScores[option] = 0;
-            });
-
-            window.allSubmissions.forEach(submission => {
-                window.OPTIONS.forEach(option => {
-                    const rank = submission.ranks[option];
-                    if (rank) {
-                        optionScores[option] += (window.OPTIONS.length - rank + 1);
-                    }
-                });
-            });
-
-            let rankedOptions = Object.keys(optionScores).map(option => {
-                const totalScore = optionScores[option];
-                const numberOfParticipants = window.allSubmissions.length;
-                const averageScore = numberOfParticipants > 0 ? (totalScore / numberOfParticipants) : 0;
-                return {
-                    option: option,
-                    score: totalScore,
-                    averageScore: parseFloat(averageScore.toFixed(2))
-                };
-            });
-
-            rankedOptions.sort((a, b) => b.score - a.score);
-
-            rankedOptions.forEach((item, index) => {
-                if (index > 0 && item.score === rankedOptions[index - 1].score) {
-                    item.rank = rankedOptions[index - 1].rank;
-                } else {
-                    item.rank = index + 1;
-                }
-            });
-            return rankedOptions;
-        }
-
-        window.renderGroupRanking = function() {
-            const rankedOptions = calculateGroupRanking();
-            resultsTableBody.innerHTML = '';
-
-            if (window.allSubmissions.length === 0) {
-                resultsTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-gray-500">No submissions yet. Be the first!</td></tr>`;
-                return;
-            }
-
-            rankedOptions.forEach(item => {
-                const row = resultsTableBody.insertRow();
-                row.innerHTML = `
-                    <td class="font-bold text-blue-700">${item.rank}</td>
-                    <td>${item.option}</td>
-                    <td>${item.score}</td>
-                    <td>${item.averageScore}</td>
-                `;
-            });
-        };
-
-        window.renderAllSubmissions = function() {
-            submissionsTableHead.innerHTML = '<th>Participant</th>';
-            submissionsTableBody.innerHTML = '';
-
-            window.OPTIONS.forEach(option => {
-                const th = document.createElement('th');
-                th.textContent = option;
-                submissionsTableHead.appendChild(th);
-            });
-
-            if (window.allSubmissions.length === 0) {
-                submissionsTableBody.innerHTML = `<tr><td colspan="${window.OPTIONS.length + 1}" class="text-center text-gray-500">No submissions yet.</td></tr>`;
-                return;
-            }
-
-            window.allSubmissions.forEach(submission => {
-                const row = submissionsTableBody.insertRow();
-                const participantCell = row.insertCell();
-                participantCell.textContent = submission.name;
-
-                window.OPTIONS.forEach(option => {
-                    const rankCell = row.insertCell();
-                    rankCell.textContent = submission.ranks[option] || '-';
-                });
-            });
-        };
-
-        async function handleSubmitRanks() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
-            if (window.OPTIONS.length === 0) {
-                showMessage("Please define options in the 'Define Ranking Options' section first.");
-                return;
-            }
-
-            const participantName = participantNameInput.value.trim();
-            if (!participantName) {
-                showMessage("Please enter your name.");
-                return;
-            }
-
-            const currentRanks = {};
-            const selectedRanks = new Set();
-            let allRanked = true;
-
-            window.OPTIONS.forEach(option => {
-                const safeId = encodeURIComponent(option).replace(/%/g, '_');
-                const selectElement = document.getElementById(safeId);
-
-                if (!selectElement) {
-                    allRanked = false;
-                    return;
-                }
-                const rank = selectElement.value;
-                if (!rank) {
-                    allRanked = false;
-                } else if (selectedRanks.has(rank)) {
-                    showMessage(`Duplicate rank '${rank}' detected. Each option must have a unique rank.`);
-                    allRanked = false;
-                    return;
-                } else {
-                    currentRanks[option] = parseInt(rank);
-                    selectedRanks.add(rank);
-                }
-            });
-
-            if (!allRanked) {
-                if (selectedRanks.size !== window.OPTIONS.length) {
-                     showMessage("Please rank all options uniquely.");
-                }
-                return;
-            }
-
-            window.toggleLoading(true);
-            try {
-                const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
-
-                const q = query(submissionsColRef, where("name", "==", participantName));
-                const querySnapshot = await getDocs(q);
-
-                if (!querySnapshot.empty) {
-                    const docToUpdate = querySnapshot.docs[0];
-                    await setDoc(doc(submissionsColRef, docToUpdate.id), {
-                        name: participantName,
-                        ranks: currentRanks,
-                        timestamp: new Date()
-                    });
-                    showMessage(`Updated ranks for ${participantName}!`);
-                } else {
-                    await addDoc(submissionsColRef, {
-                        name: participantName,
-                        ranks: currentRanks,
-                        timestamp: new Date()
-                    });
-                    showMessage(`Thanks, ${participantName}! Your ranks have been submitted.`);
-                }
-            } catch (error) {
-                console.error("Error submitting ranks:", error);
-                showMessage("Failed to submit ranks. Please try again.", 5000);
-            } finally {
-                participantNameInput.value = '';
-                window.initializeRankingInputs();
-                window.toggleLoading(false);
-            }
-        }
-
-        /**
-         * Archives the current options and submissions, then resets the session.
-         */
-        async function archiveAndReset() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
-            window.toggleLoading(true);
-
-            const companyName = companyNameInput.value.trim();
-            if (!companyName) {
-                showMessage("Please enter a company or project name to archive the results.", 5000);
-                window.toggleLoading(false);
-                return;
-            }
-
-            try {
-                await runTransaction(window.db, async (transaction) => {
-                    // Get current options and submissions
-                    const optionsDocRef = doc(window.db, `artifacts/${window.appId}/public/data/ranking_options`, 'current_options');
-                    const optionsSnap = await transaction.get(optionsDocRef);
-                    const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
-                    const submissionsSnap = await getDocs(submissionsColRef);
-
-                    // Check for existing data
-                    if (!optionsSnap.exists() && submissionsSnap.empty) {
-                        showMessage("There is no data to archive. Resetting session...", 3000);
-                        return;
-                    }
-
-                    // Archive the data
-                    const archiveSessionId = companyName + '_' + new Date().getTime();
-                    const archiveDocRef = doc(window.db, `artifacts/${window.appId}/public/data/archived_sessions`, archiveSessionId);
-
-                    const archivedData = {
-                        company: companyName,
-                        options: optionsSnap.exists() ? optionsSnap.data().options : [],
-                        timestamp: new Date()
-                    };
-                    transaction.set(archiveDocRef, archivedData);
-
-                    // Archive submissions as a subcollection
-                    const archivedSubmissionsColRef = collection(archiveDocRef, 'submissions');
-                    submissionsSnap.forEach(submissionDoc => {
-                        transaction.set(doc(archivedSubmissionsColRef, submissionDoc.id), submissionDoc.data());
-                    });
-
-                    // Clear active session data
-                    transaction.set(optionsDocRef, { options: [] });
-                    submissionsSnap.forEach(submissionDoc => {
-                        transaction.delete(submissionDoc.ref);
-                    });
-                });
-
-                showMessage(`Results for '${companyName}' have been archived and the session has been reset!`);
-                companyNameInput.value = ''; // Clear the input field for the next session
-
-            } catch (e) {
-                console.error("Transaction failed: ", e);
-                showMessage("Failed to archive and reset the session. Please try again.", 5000);
-            } finally {
-                // Loading overlay will be hidden by the listeners
             }
         }
 
@@ -1232,6 +684,10 @@
          * Downloads the current results as an HTML file.
          */
         function downloadHTMLResults() {
+            if (!resultsTableBody || !submissionsTableBody || !companyNameInput) {
+                showMessage("Results not available to download yet.", 3000);
+                return;
+            }
             const resultsTableHtml = document.getElementById('resultsTable').outerHTML;
             const submissionsTableHtml = document.getElementById('submissionsTable').outerHTML;
             const companyName = companyNameInput.value.trim() || 'Untitled Session';
@@ -1274,37 +730,33 @@
             URL.revokeObjectURL(a.href);
         }
 
-        // Event Listeners
-        setOptionsBtn.addEventListener('click', setOptionsFromInput);
-        submitRanksBtn.addEventListener('click', handleSubmitRanks);
-        printResultsBtn.addEventListener('click', () => {
-            window.print();
-        });
-        downloadHtmlBtn.addEventListener('click', downloadHTMLResults);
-        archiveAndResetBtn.addEventListener('click', archiveAndReset);
-
-        // Global variables and event listeners
-        window.OPTIONS = [];
-        const MAX_OPTIONS = 15;
-        window.allSubmissions = [];
-
-        const loadingOverlay = document.getElementById('loadingOverlay');
-        const optionsInputFieldsDiv = document.getElementById('optionsInputFields');
-        const setOptionsBtn = document.getElementById('setOptionsBtn');
-        const participantNameInput = document.getElementById('participantName');
-        const rankingInputsDiv = document.getElementById('rankingInputs');
-        const submitRanksBtn = document.getElementById('submitRanksBtn');
-        const resultsTableBody = document.querySelector('#resultsTable tbody');
-        const submissionsTableHead = document.querySelector('#submissionsTable thead tr');
-        const submissionsTableBody = document.querySelector('#submissionsTable tbody');
-        const messageBox = document.getElementById('messageBox');
-        const printResultsBtn = document.getElementById('printResultsBtn');
-        const downloadHtmlBtn = document.getElementById('downloadHtmlBtn');
-        const companyNameInput = document.getElementById('companyName');
-        const archiveAndResetBtn = document.getElementById('archiveAndResetBtn');
-
         // Initial setup on page load
         window.onload = async function() {
+            // Get references to DOM elements now that the page is fully loaded
+            loadingOverlay = document.getElementById('loadingOverlay');
+            optionsInputFieldsDiv = document.getElementById('optionsInputFields');
+            setOptionsBtn = document.getElementById('setOptionsBtn');
+            participantNameInput = document.getElementById('participantName');
+            rankingInputsDiv = document.getElementById('rankingInputs');
+            submitRanksBtn = document.getElementById('submitRanksBtn');
+            resultsTableBody = document.querySelector('#resultsTable tbody');
+            submissionsTableHead = document.querySelector('#submissionsTable thead tr');
+            submissionsTableBody = document.querySelector('#submissionsTable tbody');
+            messageBox = document.getElementById('messageBox');
+            printResultsBtn = document.getElementById('printResultsBtn');
+            downloadHtmlBtn = document.getElementById('downloadHtmlBtn');
+            companyNameInput = document.getElementById('companyName');
+            archiveAndResetBtn = document.getElementById('archiveAndResetBtn');
+
+            // Attach event listeners
+            if (setOptionsBtn) setOptionsBtn.addEventListener('click', setOptionsFromInput);
+            if (submitRanksBtn) submitRanksBtn.addEventListener('click', handleSubmitRanks);
+            if (printResultsBtn) printResultsBtn.addEventListener('click', () => {
+                window.print();
+            });
+            if (downloadHtmlBtn) downloadHtmlBtn.addEventListener('click', downloadHTMLResults);
+            if (archiveAndResetBtn) archiveAndResetBtn.addEventListener('click', archiveAndReset);
+
             window.toggleLoading(true);
             try {
                 await initializeFirebase();
@@ -1314,7 +766,7 @@
             } finally {
                 // A failsafe to hide the loading overlay. The Firestore listeners should hide it normally.
                 setTimeout(() => {
-                    if (loadingOverlay.classList.contains('show')) {
+                    if (loadingOverlay && loadingOverlay.classList.contains('show')) {
                         console.log("Forcing loading overlay to hide after 5 seconds.");
                         window.toggleLoading(false);
                     }
@@ -1322,5 +774,117 @@
             }
         };
     </script>
+</head>
+<body>
+    <div class="loading-overlay" id="loadingOverlay">
+        Loading...
+    </div>
+
+    <div class="container">
+        <div id="userIdDisplay"></div>
+        <div class="message-box" id="messageBox"></div>
+
+        <!-- Section to Define Ranking Options -->
+        <div class="p-6 bg-yellow-50 rounded-lg">
+            <h2 class="section-title text-yellow-800">1. Define Ranking Options</h2>
+            <p class="text-gray-600 mb-4">
+                Enter the options you want to rank. These could be ideas, projects, or any items for a SWOT analysis.
+            </p>
+            <div id="optionsInputFields" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <!-- Option input fields will be dynamically generated here -->
+            </div>
+            <div class="flex justify-end">
+                <button id="setOptionsBtn" class="btn-primary bg-yellow-500 hover:bg-yellow-600">
+                    Set Options
+                </button>
+            </div>
+        </div>
+
+        <!-- Section for Participant Ranking -->
+        <div class="p-6 bg-blue-50 rounded-lg">
+            <h2 class="section-title text-blue-800">2. Your Ranking</h2>
+            <p class="text-gray-600 mb-4">
+                Enter your name and assign a unique rank to each option. A rank of 1 is the highest.
+            </p>
+            <div class="input-group mb-4">
+                <label for="participantName">Your Name (Required):</label>
+                <input type="text" id="participantName" placeholder="e.g., Jane Doe" class="rounded-md focus:ring-blue-500 focus:border-blue-500">
+            </div>
+            <div id="rankingInputs" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <!-- Ranking input fields will be dynamically generated here -->
+            </div>
+            <div class="flex justify-end">
+                <button id="submitRanksBtn" class="btn-primary bg-blue-500 hover:bg-blue-600">
+                    Submit My Ranks
+                </button>
+            </div>
+        </div>
+
+        <!-- Section for Group Ranking Results -->
+        <div class="p-6 bg-green-50 rounded-lg">
+            <h2 class="section-title text-green-800">3. Group Ranking Results</h2>
+            <p class="text-gray-600 mb-4">
+                This table shows the combined scores and final rankings from all participants.
+            </p>
+            <div class="table-container">
+                <table class="min-w-full" id="resultsTable">
+                    <thead>
+                        <tr>
+                            <th>Rank</th>
+                            <th>Option</th>
+                            <th>Total Score</th>
+                            <th>Average Score</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resultsTableBody">
+                        <tr><td colspan="4" class="text-center text-gray-500">No submissions yet. Be the first!</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Section to view all submissions -->
+        <div class="p-6 bg-purple-50 rounded-lg">
+            <h2 class="section-title text-purple-800">4. All Participant Submissions</h2>
+            <p class="text-gray-600 mb-4">
+                Here's a breakdown of how each participant ranked the options.
+            </p>
+            <div class="table-container">
+                <table class="min-w-full" id="submissionsTable">
+                    <thead>
+                        <tr>
+                            <!-- Headers dynamically generated -->
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- Submissions dynamically generated -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Section for Session Management and Reporting -->
+        <div class="p-6 bg-pink-50 rounded-lg">
+            <h2 class="section-title text-pink-800">5. Manage & Report</h2>
+            <p class="text-gray-600 mb-4">
+                Enter a company name to save your session, download the report, or archive the data for a fresh start.
+            </p>
+            <div class="input-group mb-4">
+                <label for="companyName">Company/Project Name:</label>
+                <input type="text" id="companyName" placeholder="e.g., Acme Inc. Q3 Strategy" class="rounded-md focus:ring-pink-500 focus:border-pink-500">
+            </div>
+            <div class="flex flex-col sm:flex-row gap-4">
+                <button id="downloadHtmlBtn" class="btn-primary bg-pink-500 hover:bg-pink-600 flex-1">
+                    Download HTML Report
+                </button>
+                <button id="printResultsBtn" class="btn-primary bg-pink-500 hover:bg-pink-600 flex-1">
+                    Print Report
+                </button>
+                <button id="archiveAndResetBtn" class="btn-primary bg-red-500 hover:bg-red-600 flex-1">
+                    Archive & Reset Session
+                </button>
+            </div>
+        </div>
+    </div>
 </body>
 </html>
