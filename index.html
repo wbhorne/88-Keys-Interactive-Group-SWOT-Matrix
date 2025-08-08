@@ -206,11 +206,12 @@
                 window.firebaseApp = initializeApp(firebaseConfig);
                 window.db = getFirestore(window.firebaseApp);
                 window.auth = getAuth(window.firebaseApp);
-
+                
                 if (authStatusDiv) {
-                    authStatusDiv.innerHTML = 'Authenticating...';
+                    authStatusDiv.innerHTML = `<span style="color: #6366f1;">Authenticating...</span>`;
                 }
 
+                // Attempt to sign in
                 if (initialAuthToken) {
                     console.log("Signing in with custom token.");
                     await signInWithCustomToken(window.auth, initialAuthToken);
@@ -219,9 +220,7 @@
                     await signInAnonymously(window.auth);
                 }
 
-                // Wait for the auth state change to be processed
-                await new Promise(resolve => onAuthStateChanged(window.auth, resolve));
-
+                // Check and update auth status immediately after sign-in attempt
                 if (window.auth.currentUser) {
                     window.currentUserId = window.auth.currentUser.uid;
                     if (authStatusDiv) {
@@ -229,18 +228,21 @@
                     }
                     window.isAuthReady = true;
                     console.log("Firebase Auth Ready. User ID:", window.currentUserId);
+                    return true;
                 } else {
                     if (authStatusDiv) {
-                        authStatusDiv.innerHTML = 'Authentication failed. Please refresh the page.';
+                        authStatusDiv.innerHTML = `<span style="color: #ef4444;">Authentication failed. Please refresh the page.</span>`;
                     }
                     console.error("No user found after sign-in attempt.");
+                    return false;
                 }
             } catch (error) {
                 console.error("Error initializing Firebase or signing in:", error);
                 if (authStatusDiv) {
-                    authStatusDiv.innerHTML = 'Authentication failed. Please refresh the page.';
+                    authStatusDiv.innerHTML = `<span style="color: #ef4444;">Authentication failed. Please refresh the page.</span>`;
                 }
                 showMessage("Failed to initialize Firebase. Some features may not work.", 5000);
+                return false;
             }
         }
 
@@ -261,7 +263,6 @@
                 if (JSON.stringify(newOptions) !== JSON.stringify(window.OPTIONS)) {
                     window.OPTIONS = newOptions;
                     console.log("Options updated from Firestore:", window.OPTIONS);
-                    window.renderOptionInputFields();
                     window.initializeRankingInputs();
                     window.renderGroupRanking();
                     window.renderAllSubmissions();
@@ -319,6 +320,7 @@
         window.renderOptionInputFields = function() {
             if (!optionsInputFieldsDiv) return;
             optionsInputFieldsDiv.innerHTML = '';
+            // Only render the initial empty input fields
             for (let i = 0; i < MAX_OPTIONS; i++) {
                 const inputGroup = document.createElement('div');
                 inputGroup.className = 'input-group';
@@ -328,12 +330,6 @@
                 `;
                 optionsInputFieldsDiv.appendChild(inputGroup);
             }
-            window.OPTIONS.forEach((option, index) => {
-                const inputField = document.getElementById(`option${index + 1}`);
-                if (inputField) {
-                    inputField.value = option;
-                }
-            });
         };
 
         async function setOptionsFromInput() {
@@ -711,6 +707,13 @@
             archiveAndResetBtn = document.getElementById('archiveAndResetBtn');
             authStatusDiv = document.getElementById('authStatus');
 
+            // Hide the loading overlay immediately to prevent a stuck loading screen.
+            // This allows the user to see the UI while Firebase initializes in the background.
+            window.toggleLoading(false);
+
+            // Immediately render the options input fields so they are available on page load
+            window.renderOptionInputFields();
+
             // Attach event listeners
             if (setOptionsBtn) setOptionsBtn.addEventListener('click', setOptionsFromInput);
             if (submitRanksBtn) submitRanksBtn.addEventListener('click', handleSubmitRanks);
@@ -720,18 +723,13 @@
             if (downloadHtmlBtn) downloadHtmlBtn.addEventListener('click', downloadHTMLResults);
             if (archiveAndResetBtn) archiveAndResetBtn.addEventListener('click', archiveAndReset);
 
-            // Hide the loading overlay immediately to prevent a stuck loading screen.
-            // This allows the user to see the UI while Firebase initializes in the background.
-            window.toggleLoading(false);
-
-            try {
-                // Initialize Firebase and wait for authentication to complete
-                await initializeFirebase();
-                // Once authenticated, set up the real-time listeners and other UI elements
+            // Initialize Firebase and wait for authentication to complete
+            const isAuthenticated = await initializeFirebase();
+            if (isAuthenticated) {
+                // If authentication is successful, set up the real-time listeners and render initial UI
                 setupFirestoreListeners();
-            } catch (error) {
-                console.error("Application startup failed:", error);
-                showMessage("Application startup failed. Please check your browser console for details.", 5000);
+            } else {
+                console.error("Application cannot proceed without authentication.");
             }
         });
     </script>
