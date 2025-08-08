@@ -198,63 +198,58 @@
         let loadingOverlay, optionsInputFieldsDiv, setOptionsBtn, participantNameInput, rankingInputsDiv, submitRanksBtn, resultsTableBody, submissionsTableHead, submissionsTableBody, messageBox, printResultsBtn, downloadHtmlBtn, companyNameInput, archiveAndResetBtn, authStatusDiv;
 
         /**
-         * Initializes Firebase and sets up authentication. Returns a Promise that resolves when authentication is ready.
+         * Initializes Firebase and sets up authentication.
          */
-        function initializeFirebase() {
-            return new Promise((resolve, reject) => {
-                try {
-                    console.log("Attempting to initialize Firebase app...");
-                    window.firebaseApp = initializeApp(firebaseConfig);
-                    window.db = getFirestore(window.firebaseApp);
-                    window.auth = getAuth(window.firebaseApp);
+        async function initializeFirebase() {
+            try {
+                console.log("Attempting to initialize Firebase app...");
+                window.firebaseApp = initializeApp(firebaseConfig);
+                window.db = getFirestore(window.firebaseApp);
+                window.auth = getAuth(window.firebaseApp);
 
-                    console.log("Setting up authentication state listener...");
-                    const unsubscribe = onAuthStateChanged(window.auth, async (user) => {
-                        console.log("onAuthStateChanged fired. User:", user);
-                        if (user) {
-                            window.currentUserId = user.uid;
-                            if (authStatusDiv) {
-                                authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
-                            }
-                            window.isAuthReady = true;
-                            console.log("Firebase Auth Ready. User ID:", window.currentUserId);
-                            unsubscribe(); // Stop listening after the first successful login
-                            resolve();
-                        } else {
-                            if (authStatusDiv) {
-                                authStatusDiv.innerHTML = 'Authentication failed. Please refresh the page.';
-                            }
-                            console.log("No user found. Attempting to sign in...");
-                            try {
-                                if (initialAuthToken) {
-                                    console.log("Signing in with custom token.");
-                                    await signInWithCustomToken(window.auth, initialAuthToken);
-                                } else {
-                                    console.log("Signing in anonymously.");
-                                    await signInAnonymously(window.auth);
-                                }
-                            } catch (signInError) {
-                                console.error("Error during sign-in:", signInError);
-                                reject(new Error("Authentication failed."));
-                            }
-                        }
-                    }, (authError) => {
-                        console.error("Error in onAuthStateChanged:", authError);
-                        reject(new Error("Authentication state error."));
-                    });
-                } catch (error) {
-                    console.error("Error initializing Firebase app:", error);
-                    reject(new Error("Failed to initialize Firebase."));
+                if (authStatusDiv) {
+                    authStatusDiv.innerHTML = 'Authenticating...';
                 }
-            });
+
+                if (initialAuthToken) {
+                    console.log("Signing in with custom token.");
+                    await signInWithCustomToken(window.auth, initialAuthToken);
+                } else {
+                    console.log("Signing in anonymously.");
+                    await signInAnonymously(window.auth);
+                }
+
+                // Wait for the auth state change to be processed
+                await new Promise(resolve => onAuthStateChanged(window.auth, resolve));
+
+                if (window.auth.currentUser) {
+                    window.currentUserId = window.auth.currentUser.uid;
+                    if (authStatusDiv) {
+                        authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
+                    }
+                    window.isAuthReady = true;
+                    console.log("Firebase Auth Ready. User ID:", window.currentUserId);
+                } else {
+                    if (authStatusDiv) {
+                        authStatusDiv.innerHTML = 'Authentication failed. Please refresh the page.';
+                    }
+                    console.error("No user found after sign-in attempt.");
+                }
+            } catch (error) {
+                console.error("Error initializing Firebase or signing in:", error);
+                if (authStatusDiv) {
+                    authStatusDiv.innerHTML = 'Authentication failed. Please refresh the page.';
+                }
+                showMessage("Failed to initialize Firebase. Some features may not work.", 5000);
+            }
         }
 
         /**
          * Sets up real-time listeners for options and submissions from Firestore.
          */
         function setupFirestoreListeners() {
-            if (!window.db) {
-                console.warn("Firestore not ready for listeners.");
+            if (!window.db || !window.isAuthReady) {
+                console.warn("Firestore or authentication not ready. Skipping listeners setup.");
                 return;
             }
 
@@ -304,7 +299,7 @@
                 messageBox.textContent = message;
                 messageBox.classList.add('show');
                 setTimeout(() => {
-                    if (messageBox) { // Add a check here as well
+                    if (messageBox) {
                        messageBox.classList.remove('show');
                     }
                 }, duration);
@@ -354,14 +349,12 @@
 
                 if (newOptions.length === 0) {
                     showMessage("Please enter at least one option.");
-                    window.toggleLoading(false);
                     return;
                 }
 
                 const uniqueOptions = new Set(newOptions.map(opt => opt.toLowerCase()));
                 if (uniqueOptions.size !== newOptions.length) {
                     showMessage("Duplicate option names detected. Please ensure all options are unique.");
-                    window.toggleLoading(false);
                     return;
                 }
 
@@ -375,7 +368,7 @@
                 console.error("Error setting options:", error);
                 showMessage("Failed to set options. Please try again.", 5000);
             } finally {
-                // Loading overlay will be hidden by the listener
+                window.toggleLoading(false);
             }
         }
 
@@ -397,7 +390,7 @@
                 console.error("Error clearing submissions:", error);
                 showMessage("Failed to clear submissions. Please try again.", 5000);
             } finally {
-                // Loading overlay will be hidden by the listener
+                window.toggleLoading(false);
             }
         }
 
@@ -459,7 +452,7 @@
                 console.error("Transaction failed: ", e);
                 showMessage("Failed to archive and reset the session. Please try again.", 5000);
             } finally {
-                // Loading overlay will be hidden by the listeners
+                window.toggleLoading(false);
             }
         }
 
@@ -700,7 +693,7 @@
         }
 
         // Initial setup on page load
-        window.onload = async function() {
+        window.addEventListener('DOMContentLoaded', async () => {
             // Get references to DOM elements now that the page is fully loaded
             loadingOverlay = document.getElementById('loadingOverlay');
             optionsInputFieldsDiv = document.getElementById('optionsInputFields');
@@ -727,7 +720,10 @@
             if (downloadHtmlBtn) downloadHtmlBtn.addEventListener('click', downloadHTMLResults);
             if (archiveAndResetBtn) archiveAndResetBtn.addEventListener('click', archiveAndReset);
 
-            window.toggleLoading(true);
+            // Hide the loading overlay immediately to prevent a stuck loading screen.
+            // This allows the user to see the UI while Firebase initializes in the background.
+            window.toggleLoading(false);
+
             try {
                 // Initialize Firebase and wait for authentication to complete
                 await initializeFirebase();
@@ -736,11 +732,8 @@
             } catch (error) {
                 console.error("Application startup failed:", error);
                 showMessage("Application startup failed. Please check your browser console for details.", 5000);
-            } finally {
-                // This is the fix: Ensure the loading overlay is hidden regardless of success or failure.
-                window.toggleLoading(false);
             }
-        };
+        });
     </script>
 </head>
 <body>
