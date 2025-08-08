@@ -202,22 +202,18 @@
         // Provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        let providedFirebaseConfig = null;
-        try {
-            providedFirebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-        } catch (e) {
-            console.error("Error parsing provided Firebase config:", e);
-        }
 
-        // A default, placeholder configuration for debugging purposes.
-        const defaultFirebaseConfig = {
-            apiKey: "your-api-key",
-            authDomain: "your-project.firebaseapp.com",
-            projectId: "your-project-id",
-            storageBucket: "your-project.appspot.com",
-            messagingSenderId: "your-sender-id",
-            appId: "your-app-id"
+        // Hard-coded placeholder configuration to ensure the app initializes.
+        // This will not connect to a real database.
+        const firebaseConfig = {
+            apiKey: "placeholder-api-key",
+            authDomain: "placeholder-project.firebaseapp.com",
+            projectId: "placeholder-project-id",
+            storageBucket: "placeholder-project.appspot.com",
+            messagingSenderId: "placeholder-sender-id",
+            appId: "placeholder-app-id"
         };
+        const isPlaceholderConfig = firebaseConfig.projectId.includes("placeholder");
 
 
         let loadingOverlay, optionsInputFieldsDiv, setOptionsBtn, participantNameInput, rankingInputsDiv, submitRanksBtn, resultsTableBody, submissionsTableHead, submissionsTableBody, messageBox, printResultsBtn, downloadHtmlBtn, companyNameInput, archiveAndResetBtn, authStatusDiv;
@@ -227,34 +223,28 @@
          * function that must be completed before any other Firebase-related code runs.
          */
         async function initializeAndAuthenticateFirebase() {
-            let firebaseConfig;
             if (authStatusDiv) {
-                authStatusDiv.innerHTML = `Checking configuration...`;
+                authStatusDiv.innerHTML = `Initializing Firebase...`;
                 authStatusDiv.classList.add('initializing');
             }
 
-            // Use the provided config if it's valid, otherwise fall back to the default.
-            if (providedFirebaseConfig && providedFirebaseConfig.projectId && providedFirebaseConfig.apiKey) {
-                firebaseConfig = providedFirebaseConfig;
-            } else {
-                firebaseConfig = defaultFirebaseConfig;
-                console.warn("Using default Firebase configuration due to missing or invalid provided config.");
-                if (authStatusDiv) {
-                    authStatusDiv.innerHTML = `⚠️ Using default Firebase config (data will not persist).`;
-                    authStatusDiv.classList.add('warning');
-                    authStatusDiv.classList.remove('initializing');
-                }
-            }
-
             try {
-                if (authStatusDiv && !authStatusDiv.classList.contains('warning')) {
-                    authStatusDiv.innerHTML = `Initializing Firebase...`;
-                }
-
                 window.firebaseApp = initializeApp(firebaseConfig);
                 window.db = getFirestore(window.firebaseApp);
                 window.auth = getAuth(window.firebaseApp);
 
+                if (isPlaceholderConfig) {
+                    if (authStatusDiv) {
+                        authStatusDiv.innerHTML = `⚠️ Using placeholder Firebase config. Data persistence is disabled.`;
+                        authStatusDiv.classList.add('warning');
+                        authStatusDiv.classList.remove('initializing');
+                    }
+                    console.warn("Using placeholder Firebase configuration. Data persistence will not work.");
+                    window.isAuthReady = true; // Still allow the app to function for testing
+                    return;
+                }
+
+                // If not using a placeholder config, proceed with authentication.
                 await new Promise((resolve, reject) => {
                     const unsubscribe = onAuthStateChanged(window.auth, async (user) => {
                         unsubscribe(); // Unsubscribe immediately after the first event
@@ -275,7 +265,7 @@
                             }
                             if (authStatusDiv) {
                                 authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
-                                authStatusDiv.classList.remove('initializing', 'warning');
+                                authStatusDiv.classList.remove('initializing');
                             }
                             console.log("Firebase Auth Ready. User ID:", window.currentUserId);
                             window.isAuthReady = true;
@@ -285,7 +275,7 @@
                             const errorMessage = `❌ Authentication failed: ${error.message}`;
                             if (authStatusDiv) {
                                 authStatusDiv.innerHTML = errorMessage;
-                                authStatusDiv.classList.remove('initializing', 'warning');
+                                authStatusDiv.classList.remove('initializing');
                                 authStatusDiv.classList.add('error');
                             }
                             showMessage(errorMessage, 10000);
@@ -299,7 +289,7 @@
                 const errorMessage = `❌ Critical Firebase error: ${error.message}`;
                 if (authStatusDiv) {
                     authStatusDiv.innerHTML = errorMessage;
-                    authStatusDiv.classList.remove('initializing', 'warning');
+                    authStatusDiv.classList.remove('initializing');
                     authStatusDiv.classList.add('error');
                 }
                 showMessage(errorMessage, 10000);
@@ -313,6 +303,11 @@
          * This function should only be called after authentication is ready.
          */
         function setupFirestoreListeners() {
+            if (isPlaceholderConfig) {
+                 console.log("Not setting up Firestore listeners because using placeholder config.");
+                 showMessage("Firestore listeners are disabled in placeholder mode.", 5000);
+                 return;
+            }
             console.log("Setting up Firestore listeners...");
             const optionsDocRef = doc(window.db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
             onSnapshot(optionsDocRef, (docSnap) => {
@@ -392,6 +387,10 @@
                 showMessage("App is not ready. Please wait for initialization to complete.", 5000);
                 return;
             }
+            if (isPlaceholderConfig) {
+                 showMessage("This is a placeholder version. Data cannot be saved.", 5000);
+                 return;
+            }
             window.toggleLoading(true);
             try {
                 const newOptions = [];
@@ -432,6 +431,10 @@
                 showMessage("App is not ready. Please wait for initialization to complete.", 5000);
                 return;
             }
+            if (isPlaceholderConfig) {
+                 showMessage("This is a placeholder version. Data cannot be cleared.", 5000);
+                 return;
+            }
             window.toggleLoading(true);
             try {
                 const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
@@ -458,6 +461,10 @@
              if (!window.isAuthReady) {
                 showMessage("App is not ready. Please wait for initialization to complete.", 5000);
                 return;
+            }
+            if (isPlaceholderConfig) {
+                 showMessage("This is a placeholder version. Data cannot be archived.", 5000);
+                 return;
             }
             window.toggleLoading(true);
 
@@ -631,6 +638,10 @@
                 showMessage("App is not ready. Please wait for initialization to complete.", 5000);
                 return;
             }
+            if (isPlaceholderConfig) {
+                 showMessage("This is a placeholder version. Data cannot be submitted.", 5000);
+                 return;
+            }
             const participantName = participantNameInput.value.trim();
             if (!participantName) {
                 showMessage("Please enter your name.");
@@ -788,7 +799,7 @@
 
             try {
                 await initializeAndAuthenticateFirebase();
-                if (window.isAuthReady) {
+                if (window.isAuthReady && !isPlaceholderConfig) {
                     setupFirestoreListeners();
                 }
             } catch (error) {
@@ -803,7 +814,7 @@
     </div>
 
     <div class="container">
-        <h1 class="app-title">Interactive SWOT Ranking Exercise</h1>
+        <h1 class="app-title">Interactive SWOT Ranking Exercise (Debug Version)</h1>
         <p class="copyright">© Placeholder Company LLC (Confidential & Restricted)</p>
         <div id="authStatus"></div>
         <div class="message-box" id="messageBox"></div>
