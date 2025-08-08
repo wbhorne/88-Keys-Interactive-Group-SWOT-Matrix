@@ -202,37 +202,7 @@
         // Provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-        /**
-         * Safely gets the Firebase configuration. It attempts to parse the provided config
-         * and falls back to a placeholder if it fails, preventing a script crash.
-         */
-        function getFirebaseConfig() {
-            let firebaseConfig;
-            let isPlaceholder = false;
-            try {
-                // We're assuming the provided config is a string. Parsing must be done carefully.
-                const providedConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
-
-                if (providedConfig && providedConfig.projectId && providedConfig.apiKey) {
-                    firebaseConfig = providedConfig;
-                } else {
-                    throw new Error("Provided Firebase config is invalid or missing required fields.");
-                }
-            } catch (e) {
-                console.warn("Could not parse provided Firebase config. Falling back to placeholder.", e);
-                isPlaceholder = true;
-                firebaseConfig = {
-                    apiKey: "placeholder-api-key",
-                    authDomain: "placeholder-project.firebaseapp.com",
-                    projectId: "placeholder-project-id",
-                    storageBucket: "placeholder-project.appspot.com",
-                    messagingSenderId: "placeholder-sender-id",
-                    appId: "placeholder-app-id"
-                };
-            }
-            return { firebaseConfig, isPlaceholder };
-        }
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
 
         let loadingOverlay, optionsInputFieldsDiv, setOptionsBtn, participantNameInput, rankingInputsDiv, submitRanksBtn, resultsTableBody, submissionsTableHead, submissionsTableBody, messageBox, printResultsBtn, downloadHtmlBtn, companyNameInput, archiveAndResetBtn, authStatusDiv;
 
@@ -241,15 +211,9 @@
          * function that must be completed before any other Firebase-related code runs.
          */
         async function initializeAndAuthenticateFirebase() {
-            const { firebaseConfig, isPlaceholder } = getFirebaseConfig();
-
             if (authStatusDiv) {
                 authStatusDiv.innerHTML = `Initializing Firebase...`;
                 authStatusDiv.classList.add('initializing');
-                if (isPlaceholder) {
-                    authStatusDiv.classList.add('warning');
-                    authStatusDiv.innerHTML = `⚠️ Using placeholder Firebase config. Data persistence is disabled.`;
-                }
             }
 
             try {
@@ -257,12 +221,7 @@
                 window.db = getFirestore(window.firebaseApp);
                 window.auth = getAuth(window.firebaseApp);
 
-                if (isPlaceholder) {
-                    window.isAuthReady = true; // Still allow the app to function for testing
-                    return;
-                }
-
-                // If not using a placeholder config, proceed with authentication.
+                // Proceed with authentication.
                 await new Promise((resolve, reject) => {
                     const unsubscribe = onAuthStateChanged(window.auth, async (user) => {
                         unsubscribe(); // Unsubscribe immediately after the first event
@@ -321,10 +280,8 @@
          * This function should only be called after authentication is ready.
          */
         function setupFirestoreListeners() {
-            const { isPlaceholder } = getFirebaseConfig();
-            if (isPlaceholder) {
-                 console.log("Not setting up Firestore listeners because using placeholder config.");
-                 showMessage("Firestore listeners are disabled in placeholder mode.", 5000);
+            if (!window.isAuthReady) {
+                 console.log("Not setting up Firestore listeners as auth is not ready.");
                  return;
             }
             console.log("Setting up Firestore listeners...");
@@ -402,9 +359,8 @@
 
         // Handles setting the options in Firestore. Includes a defensive check.
         async function setOptionsFromInput() {
-            const { isPlaceholder } = getFirebaseConfig();
-            if (!window.isAuthReady || isPlaceholder) {
-                showMessage("This is a placeholder version. Data cannot be saved.", 5000);
+            if (!window.isAuthReady) {
+                showMessage("App is not ready. Please wait for initialization to complete.", 5000);
                 return;
             }
             window.toggleLoading(true);
@@ -443,9 +399,8 @@
 
         // Clears all submissions from the database.
         async function clearAllSubmissions() {
-            const { isPlaceholder } = getFirebaseConfig();
-            if (!window.isAuthReady || isPlaceholder) {
-                showMessage("This is a placeholder version. Data cannot be cleared.", 5000);
+            if (!window.isAuthReady) {
+                showMessage("App is not ready. Please wait for initialization to complete.", 5000);
                 return;
             }
             window.toggleLoading(true);
@@ -471,9 +426,8 @@
 
         // Archives the current session and resets the data.
         async function archiveAndReset() {
-            const { isPlaceholder } = getFirebaseConfig();
-            if (!window.isAuthReady || isPlaceholder) {
-                showMessage("This is a placeholder version. Data cannot be archived.", 5000);
+            if (!window.isAuthReady) {
+                showMessage("App is not ready. Please wait for initialization to complete.", 5000);
                 return;
             }
             window.toggleLoading(true);
@@ -644,9 +598,8 @@
 
         // Submits a single participant's ranking.
         async function handleSubmitRanks() {
-            const { isPlaceholder } = getFirebaseConfig();
-            if (!window.isAuthReady || isPlaceholder) {
-                showMessage("This is a placeholder version. Data cannot be submitted.", 5000);
+            if (!window.isAuthReady) {
+                showMessage("App is not ready. Please wait for initialization to complete.", 5000);
                 return;
             }
             const participantName = participantNameInput.value.trim();
@@ -806,8 +759,7 @@
 
             try {
                 await initializeAndAuthenticateFirebase();
-                const { isPlaceholder } = getFirebaseConfig();
-                if (window.isAuthReady && !isPlaceholder) {
+                if (window.isAuthReady) {
                     setupFirestoreListeners();
                 }
             } catch (error) {
@@ -822,7 +774,7 @@
     </div>
 
     <div class="container">
-        <h1 class="app-title">Interactive SWOT Ranking Exercise (Final Debug Version)</h1>
+        <h1 class="app-title">Interactive SWOT Ranking Exercise</h1>
         <p class="copyright">© Placeholder Company LLC (Confidential & Restricted)</p>
         <div id="authStatus"></div>
         <div class="message-box" id="messageBox"></div>
