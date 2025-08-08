@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>88 Keys Interactive SWOT Ranking Exercise (Confidential & Restricted © 88 Keys LLC)</title>
+    <title>Interactive SWOT Ranking Exercise</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -154,6 +154,9 @@
         #authStatus.initializing {
             color: #4c51bf;
         }
+        #authStatus.warning {
+            color: #d69e2e;
+        }
         /* --- Print-specific styles --- */
         @media print {
             body {
@@ -199,6 +202,23 @@
         // Provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+        let providedFirebaseConfig = null;
+        try {
+            providedFirebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        } catch (e) {
+            console.error("Error parsing provided Firebase config:", e);
+        }
+
+        // A default, placeholder configuration for debugging purposes.
+        const defaultFirebaseConfig = {
+            apiKey: "your-api-key",
+            authDomain: "your-project.firebaseapp.com",
+            projectId: "your-project-id",
+            storageBucket: "your-project.appspot.com",
+            messagingSenderId: "your-sender-id",
+            appId: "your-app-id"
+        };
+
 
         let loadingOverlay, optionsInputFieldsDiv, setOptionsBtn, participantNameInput, rankingInputsDiv, submitRanksBtn, resultsTableBody, submissionsTableHead, submissionsTableBody, messageBox, printResultsBtn, downloadHtmlBtn, companyNameInput, archiveAndResetBtn, authStatusDiv;
 
@@ -213,28 +233,21 @@
                 authStatusDiv.classList.add('initializing');
             }
 
-            try {
-                // Safely parse the provided configuration
-                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                     firebaseConfig = JSON.parse(__firebase_config);
-                } else {
-                    throw new Error("Firebase configuration (__firebase_config) is missing or empty.");
-                }
-            } catch (e) {
-                console.error("Critical error parsing Firebase config:", e);
-                const errorMessage = `❌ Critical error: Firebase configuration is invalid. Please ensure the configuration is a valid JSON string.`;
+            // Use the provided config if it's valid, otherwise fall back to the default.
+            if (providedFirebaseConfig && providedFirebaseConfig.projectId && providedFirebaseConfig.apiKey) {
+                firebaseConfig = providedFirebaseConfig;
+            } else {
+                firebaseConfig = defaultFirebaseConfig;
+                console.warn("Using default Firebase configuration due to missing or invalid provided config.");
                 if (authStatusDiv) {
-                    authStatusDiv.innerHTML = errorMessage;
+                    authStatusDiv.innerHTML = `⚠️ Using default Firebase config (data will not persist).`;
+                    authStatusDiv.classList.add('warning');
                     authStatusDiv.classList.remove('initializing');
-                    authStatusDiv.classList.add('error');
                 }
-                showMessage(errorMessage, 15000);
-                window.isAuthReady = false;
-                throw new Error("Invalid Firebase configuration.");
             }
 
             try {
-                if (authStatusDiv) {
+                if (authStatusDiv && !authStatusDiv.classList.contains('warning')) {
                     authStatusDiv.innerHTML = `Initializing Firebase...`;
                 }
 
@@ -262,7 +275,7 @@
                             }
                             if (authStatusDiv) {
                                 authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
-                                authStatusDiv.classList.remove('initializing');
+                                authStatusDiv.classList.remove('initializing', 'warning');
                             }
                             console.log("Firebase Auth Ready. User ID:", window.currentUserId);
                             window.isAuthReady = true;
@@ -272,7 +285,7 @@
                             const errorMessage = `❌ Authentication failed: ${error.message}`;
                             if (authStatusDiv) {
                                 authStatusDiv.innerHTML = errorMessage;
-                                authStatusDiv.classList.remove('initializing');
+                                authStatusDiv.classList.remove('initializing', 'warning');
                                 authStatusDiv.classList.add('error');
                             }
                             showMessage(errorMessage, 10000);
@@ -286,7 +299,7 @@
                 const errorMessage = `❌ Critical Firebase error: ${error.message}`;
                 if (authStatusDiv) {
                     authStatusDiv.innerHTML = errorMessage;
-                    authStatusDiv.classList.remove('initializing');
+                    authStatusDiv.classList.remove('initializing', 'warning');
                     authStatusDiv.classList.add('error');
                 }
                 showMessage(errorMessage, 10000);
@@ -790,8 +803,8 @@
     </div>
 
     <div class="container">
-        <h1 class="app-title">88 Keys Interactive SWOT Ranking Exercise</h1>
-        <p class="copyright">© 88 Keys LLC (Confidential & Restricted)</p>
+        <h1 class="app-title">Interactive SWOT Ranking Exercise</h1>
+        <p class="copyright">© Placeholder Company LLC (Confidential & Restricted)</p>
         <div id="authStatus"></div>
         <div class="message-box" id="messageBox"></div>
 
