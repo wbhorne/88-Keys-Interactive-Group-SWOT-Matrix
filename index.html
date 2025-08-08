@@ -198,59 +198,75 @@
         let loadingOverlay, optionsInputFieldsDiv, setOptionsBtn, participantNameInput, rankingInputsDiv, submitRanksBtn, resultsTableBody, submissionsTableHead, submissionsTableBody, messageBox, printResultsBtn, downloadHtmlBtn, companyNameInput, archiveAndResetBtn, authStatusDiv;
 
         /**
-         * Initializes Firebase and sets up authentication.
+         * Initializes Firebase and sets up authentication listener.
          */
-        async function initializeFirebase() {
+        function initializeFirebase() {
             try {
                 console.log("Attempting to initialize Firebase app...");
                 window.firebaseApp = initializeApp(firebaseConfig);
                 window.db = getFirestore(window.firebaseApp);
                 window.auth = getAuth(window.firebaseApp);
-                
+
                 if (authStatusDiv) {
                     authStatusDiv.innerHTML = `<span style="color: #6366f1;">Authenticating...</span>`;
                 }
-
-                // Attempt to sign in
-                if (initialAuthToken) {
-                    console.log("Signing in with custom token.");
-                    await signInWithCustomToken(window.auth, initialAuthToken);
-                } else {
-                    console.log("Signing in anonymously.");
-                    await signInAnonymously(window.auth);
-                }
-
-                // Check and update auth status immediately after sign-in attempt
-                if (window.auth.currentUser) {
-                    window.currentUserId = window.auth.currentUser.uid;
-                    if (authStatusDiv) {
-                        authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
+                
+                // Set up the authentication listener
+                onAuthStateChanged(window.auth, async (user) => {
+                    if (user) {
+                        window.currentUserId = user.uid;
+                        if (authStatusDiv) {
+                            authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
+                        }
+                        console.log("Firebase Auth Ready. User ID:", window.currentUserId);
+                    } else {
+                         // Sign in anonymously if no user is found
+                        try {
+                            if (initialAuthToken) {
+                                console.log("No user found. Signing in with custom token.");
+                                await signInWithCustomToken(window.auth, initialAuthToken);
+                            } else {
+                                console.log("No user found. Signing in anonymously.");
+                                await signInAnonymously(window.auth);
+                            }
+                        } catch (error) {
+                            console.error("Error during anonymous/custom sign-in:", error);
+                            if (authStatusDiv) {
+                                authStatusDiv.innerHTML = `<span style="color: #ef4444;">Authentication failed. Please refresh the page.</span>`;
+                            }
+                        }
+                        window.currentUserId = window.auth.currentUser ? window.auth.currentUser.uid : null;
+                        if (window.currentUserId) {
+                             if (authStatusDiv) {
+                                authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
+                            }
+                        } else {
+                             if (authStatusDiv) {
+                                authStatusDiv.innerHTML = `<span style="color: #ef4444;">Authentication failed. Please refresh the page.</span>`;
+                            }
+                        }
                     }
+
+                    // Now that auth state is determined, set the flag and set up listeners
                     window.isAuthReady = true;
-                    console.log("Firebase Auth Ready. User ID:", window.currentUserId);
-                    return true;
-                } else {
-                    if (authStatusDiv) {
-                        authStatusDiv.innerHTML = `<span style="color: #ef4444;">Authentication failed. Please refresh the page.</span>`;
-                    }
-                    console.error("No user found after sign-in attempt.");
-                    return false;
-                }
+                    setupFirestoreListeners();
+                });
+
             } catch (error) {
-                console.error("Error initializing Firebase or signing in:", error);
+                console.error("Error initializing Firebase:", error);
                 if (authStatusDiv) {
-                    authStatusDiv.innerHTML = `<span style="color: #ef4444;">Authentication failed. Please refresh the page.</span>`;
+                    authStatusDiv.innerHTML = `<span style="color: #ef4444;">Failed to initialize Firebase. Some features may not work.</span>`;
                 }
                 showMessage("Failed to initialize Firebase. Some features may not work.", 5000);
-                return false;
             }
         }
 
         /**
          * Sets up real-time listeners for options and submissions from Firestore.
+         * This function should only be called after authentication is ready.
          */
         function setupFirestoreListeners() {
-            if (!window.db || !window.isAuthReady) {
+            if (!window.isAuthReady || !window.db) {
                 console.warn("Firestore or authentication not ready. Skipping listeners setup.");
                 return;
             }
@@ -320,7 +336,6 @@
         window.renderOptionInputFields = function() {
             if (!optionsInputFieldsDiv) return;
             optionsInputFieldsDiv.innerHTML = '';
-            // Only render the initial empty input fields
             for (let i = 0; i < MAX_OPTIONS; i++) {
                 const inputGroup = document.createElement('div');
                 inputGroup.className = 'input-group';
@@ -333,6 +348,10 @@
         };
 
         async function setOptionsFromInput() {
+            if (!window.isAuthReady || !window.db) {
+                showMessage("Application not ready. Please wait for Firebase to initialize.", 5000);
+                return;
+            }
             window.toggleLoading(true);
             try {
                 const newOptions = [];
@@ -369,6 +388,10 @@
         }
 
         async function clearAllSubmissions() {
+            if (!window.isAuthReady || !window.db) {
+                showMessage("Application not ready. Please wait for Firebase to initialize.", 5000);
+                return;
+            }
             window.toggleLoading(true);
             try {
                 const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
@@ -394,6 +417,10 @@
          * Archives the current options and submissions, then resets the session.
          */
         async function archiveAndReset() {
+            if (!window.isAuthReady || !window.db) {
+                showMessage("Application not ready. Please wait for Firebase to initialize.", 5000);
+                return;
+            }
             window.toggleLoading(true);
 
             const companyName = companyNameInput.value.trim();
@@ -563,6 +590,10 @@
         };
 
         async function handleSubmitRanks() {
+            if (!window.isAuthReady || !window.db) {
+                showMessage("Application not ready. Please wait for Firebase to initialize.", 5000);
+                return;
+            }
             const participantName = participantNameInput.value.trim();
             if (!participantName) {
                 showMessage("Please enter your name.");
@@ -689,7 +720,7 @@
         }
 
         // Initial setup on page load
-        window.addEventListener('DOMContentLoaded', async () => {
+        window.addEventListener('DOMContentLoaded', () => {
             // Get references to DOM elements now that the page is fully loaded
             loadingOverlay = document.getElementById('loadingOverlay');
             optionsInputFieldsDiv = document.getElementById('optionsInputFields');
@@ -708,7 +739,6 @@
             authStatusDiv = document.getElementById('authStatus');
 
             // Hide the loading overlay immediately to prevent a stuck loading screen.
-            // This allows the user to see the UI while Firebase initializes in the background.
             window.toggleLoading(false);
 
             // Immediately render the options input fields so they are available on page load
@@ -723,14 +753,9 @@
             if (downloadHtmlBtn) downloadHtmlBtn.addEventListener('click', downloadHTMLResults);
             if (archiveAndResetBtn) archiveAndResetBtn.addEventListener('click', archiveAndReset);
 
-            // Initialize Firebase and wait for authentication to complete
-            const isAuthenticated = await initializeFirebase();
-            if (isAuthenticated) {
-                // If authentication is successful, set up the real-time listeners and render initial UI
-                setupFirestoreListeners();
-            } else {
-                console.error("Application cannot proceed without authentication.");
-            }
+            // Initialize Firebase. This function now sets up the auth listener
+            // which will handle the rest of the application setup once auth is ready.
+            initializeFirebase();
         });
     </script>
 </head>
