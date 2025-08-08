@@ -199,10 +199,21 @@
         const MAX_OPTIONS = 15;
         window.allSubmissions = [];
 
-        // Provided by the Canvas environment
+        // Provided by the Canvas environment, or fallback to the user's config
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        
+        // This is the key change: we provide a hardcoded fallback configuration
+        const productionFirebaseConfig = {
+          apiKey: "AIzaSyB9_qveikzSy4KU9ZF9GSuWIXZFaSczep8",
+          authDomain: "keys-swot-matrix-ranking.firebaseapp.com",
+          projectId: "keys-swot-matrix-ranking",
+          storageBucket: "keys-swot-matrix-ranking.firebasestorage.app",
+          messagingSenderId: "865452112588",
+          appId: "1:865452112588:web:f3e322c113cc7444e1a069",
+          measurementId: "G-0PFJPY6D10"
+        };
+        const firebaseConfig = typeof __firebase_config !== 'undefined' && Object.keys(JSON.parse(__firebase_config)).length > 0 ? JSON.parse(__firebase_config) : productionFirebaseConfig;
 
         let loadingOverlay, optionsInputFieldsDiv, setOptionsBtn, participantNameInput, rankingInputsDiv, submitRanksBtn, resultsTableBody, submissionsTableHead, submissionsTableBody, messageBox, printResultsBtn, downloadHtmlBtn, companyNameInput, archiveAndResetBtn, authStatusDiv;
 
