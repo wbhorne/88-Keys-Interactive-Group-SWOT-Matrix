@@ -148,6 +148,12 @@
             padding-bottom: 1rem;
             font-weight: 600;
         }
+        #authStatus.error {
+            color: #ef4444;
+        }
+        #authStatus.initializing {
+            color: #4c51bf;
+        }
         /* --- Print-specific styles --- */
         @media print {
             body {
@@ -192,7 +198,6 @@
 
         // Provided by the Canvas environment
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         let loadingOverlay, optionsInputFieldsDiv, setOptionsBtn, participantNameInput, rankingInputsDiv, submitRanksBtn, resultsTableBody, submissionsTableHead, submissionsTableBody, messageBox, printResultsBtn, downloadHtmlBtn, companyNameInput, archiveAndResetBtn, authStatusDiv;
@@ -202,17 +207,41 @@
          * function that must be completed before any other Firebase-related code runs.
          */
         async function initializeAndAuthenticateFirebase() {
+            let firebaseConfig;
+            if (authStatusDiv) {
+                authStatusDiv.innerHTML = `Checking configuration...`;
+                authStatusDiv.classList.add('initializing');
+            }
+
+            try {
+                // Safely parse the provided configuration
+                if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                     firebaseConfig = JSON.parse(__firebase_config);
+                } else {
+                    throw new Error("Firebase configuration (__firebase_config) is missing or empty.");
+                }
+            } catch (e) {
+                console.error("Critical error parsing Firebase config:", e);
+                const errorMessage = `❌ Critical error: Firebase configuration is invalid. Please ensure the configuration is a valid JSON string.`;
+                if (authStatusDiv) {
+                    authStatusDiv.innerHTML = errorMessage;
+                    authStatusDiv.classList.remove('initializing');
+                    authStatusDiv.classList.add('error');
+                }
+                showMessage(errorMessage, 15000);
+                window.isAuthReady = false;
+                throw new Error("Invalid Firebase configuration.");
+            }
+
             try {
                 if (authStatusDiv) {
-                    authStatusDiv.innerHTML = `<span style="color: #4c51bf;">Initializing Firebase...</span>`;
+                    authStatusDiv.innerHTML = `Initializing Firebase...`;
                 }
 
-                // Initialize the app and get service instances
                 window.firebaseApp = initializeApp(firebaseConfig);
                 window.db = getFirestore(window.firebaseApp);
                 window.auth = getAuth(window.firebaseApp);
 
-                // Wait for the auth state to be determined and handle sign-in
                 await new Promise((resolve, reject) => {
                     const unsubscribe = onAuthStateChanged(window.auth, async (user) => {
                         unsubscribe(); // Unsubscribe immediately after the first event
@@ -233,16 +262,20 @@
                             }
                             if (authStatusDiv) {
                                 authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
+                                authStatusDiv.classList.remove('initializing');
                             }
                             console.log("Firebase Auth Ready. User ID:", window.currentUserId);
                             window.isAuthReady = true;
                             resolve();
                         } catch (error) {
                             console.error("Error during authentication:", error);
+                            const errorMessage = `❌ Authentication failed: ${error.message}`;
                             if (authStatusDiv) {
-                                authStatusDiv.innerHTML = `<span style="color: #ef4444;">❌ Authentication failed. Please refresh.</span>`;
+                                authStatusDiv.innerHTML = errorMessage;
+                                authStatusDiv.classList.remove('initializing');
+                                authStatusDiv.classList.add('error');
                             }
-                            showMessage("Authentication failed. Please refresh the page.", 10000);
+                            showMessage(errorMessage, 10000);
                             window.isAuthReady = false;
                             reject(error);
                         }
@@ -250,10 +283,13 @@
                 });
             } catch (error) {
                 console.error("Critical error initializing Firebase:", error);
+                const errorMessage = `❌ Critical Firebase error: ${error.message}`;
                 if (authStatusDiv) {
-                    authStatusDiv.innerHTML = `<span style="color: #ef4444;">❌ Critical Firebase error.</span>`;
+                    authStatusDiv.innerHTML = errorMessage;
+                    authStatusDiv.classList.remove('initializing');
+                    authStatusDiv.classList.add('error');
                 }
-                showMessage("A critical error occurred. Some features will not work.", 10000);
+                showMessage(errorMessage, 10000);
                 window.isAuthReady = false;
                 throw error;
             }
@@ -726,13 +762,9 @@
             archiveAndResetBtn = document.getElementById('archiveAndResetBtn');
             authStatusDiv = document.getElementById('authStatus');
 
-            // Hide the loading overlay immediately
             window.toggleLoading(false);
-
-            // Immediately render the options input fields
             window.renderOptionInputFields();
 
-            // Attach event listeners
             if (setOptionsBtn) setOptionsBtn.addEventListener('click', setOptionsFromInput);
             if (submitRanksBtn) submitRanksBtn.addEventListener('click', handleSubmitRanks);
             if (printResultsBtn) printResultsBtn.addEventListener('click', () => {
@@ -741,16 +773,12 @@
             if (downloadHtmlBtn) downloadHtmlBtn.addEventListener('click', downloadHTMLResults);
             if (archiveAndResetBtn) archiveAndResetBtn.addEventListener('click', archiveAndReset);
 
-            // CRITICAL: Initialize and authenticate Firebase first.
-            // This async call blocks the rest of the application setup until it's done.
             try {
                 await initializeAndAuthenticateFirebase();
-                // If the initialization was successful, set up the real-time listeners.
                 if (window.isAuthReady) {
                     setupFirestoreListeners();
                 }
             } catch (error) {
-                // The catch block in the initialization function will handle the message.
                 console.error("Application startup failed.", error);
             }
         });
