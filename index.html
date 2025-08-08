@@ -198,103 +198,82 @@
         let loadingOverlay, optionsInputFieldsDiv, setOptionsBtn, participantNameInput, rankingInputsDiv, submitRanksBtn, resultsTableBody, submissionsTableHead, submissionsTableBody, messageBox, printResultsBtn, downloadHtmlBtn, companyNameInput, archiveAndResetBtn, authStatusDiv;
 
         /**
-         * Initializes Firebase and sets up authentication.
+         * Initializes Firebase and sets up authentication. Returns a Promise that resolves when authentication is ready.
          */
-        async function initializeFirebase() {
-            try {
-                console.log("Attempting to initialize Firebase app...");
-                window.firebaseApp = initializeApp(firebaseConfig);
-                window.db = getFirestore(window.firebaseApp);
-                window.auth = getAuth(window.firebaseApp);
+        function initializeFirebase() {
+            return new Promise((resolve, reject) => {
+                try {
+                    console.log("Attempting to initialize Firebase app...");
+                    window.firebaseApp = initializeApp(firebaseConfig);
+                    window.db = getFirestore(window.firebaseApp);
+                    window.auth = getAuth(window.firebaseApp);
 
-                console.log("Setting up authentication state listener...");
-                onAuthStateChanged(window.auth, async (user) => {
-                    console.log("onAuthStateChanged fired. User:", user);
-                    if (user) {
-                        window.currentUserId = user.uid;
-                        if (authStatusDiv) {
-                            authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
-                        }
-                        window.isAuthReady = true;
-                        console.log("Firebase Auth Ready. User ID:", window.currentUserId);
-                        setupFirestoreListeners(); // Setup listeners once authenticated
-                    } else {
-                        if (authStatusDiv) {
-                           authStatusDiv.innerHTML = 'Authentication failed. Please refresh the page.';
-                        }
-                        console.log("No user found. Attempting to sign in...");
-                        try {
-                            if (initialAuthToken) {
-                                console.log("Signing in with custom token.");
-                                await signInWithCustomToken(window.auth, initialAuthToken);
-                            } else {
-                                console.log("Signing in anonymously.");
-                                await signInAnonymously(window.auth);
+                    console.log("Setting up authentication state listener...");
+                    const unsubscribe = onAuthStateChanged(window.auth, async (user) => {
+                        console.log("onAuthStateChanged fired. User:", user);
+                        if (user) {
+                            window.currentUserId = user.uid;
+                            if (authStatusDiv) {
+                                authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
                             }
-                        } catch (signInError) {
-                            console.error("Error during sign-in:", signInError);
-                            showMessage("Authentication failed. Please check your browser console for details.", 5000);
+                            window.isAuthReady = true;
+                            console.log("Firebase Auth Ready. User ID:", window.currentUserId);
+                            unsubscribe(); // Stop listening after the first successful login
+                            resolve();
+                        } else {
+                            if (authStatusDiv) {
+                                authStatusDiv.innerHTML = 'Authentication failed. Please refresh the page.';
+                            }
+                            console.log("No user found. Attempting to sign in...");
+                            try {
+                                if (initialAuthToken) {
+                                    console.log("Signing in with custom token.");
+                                    await signInWithCustomToken(window.auth, initialAuthToken);
+                                } else {
+                                    console.log("Signing in anonymously.");
+                                    await signInAnonymously(window.auth);
+                                }
+                            } catch (signInError) {
+                                console.error("Error during sign-in:", signInError);
+                                reject(new Error("Authentication failed."));
+                            }
                         }
-                    }
-                }, (authError) => {
-                    console.error("Error in onAuthStateChanged:", authError);
-                    showMessage("Authentication state error occurred. Please refresh.", 5000);
-                });
-            } catch (error) {
-                console.error("Error initializing Firebase app:", error);
-                showMessage("Failed to initialize the application. Please try again later.", 5000);
-            }
+                    }, (authError) => {
+                        console.error("Error in onAuthStateChanged:", authError);
+                        reject(new Error("Authentication state error."));
+                    });
+                } catch (error) {
+                    console.error("Error initializing Firebase app:", error);
+                    reject(new Error("Failed to initialize Firebase."));
+                }
+            });
         }
 
         /**
          * Sets up real-time listeners for options and submissions from Firestore.
          */
         function setupFirestoreListeners() {
-            if (!window.db || !window.isAuthReady) {
+            if (!window.db) {
                 console.warn("Firestore not ready for listeners.");
                 return;
             }
-
-            let initialOptionsLoaded = false;
-            let initialSubmissionsLoaded = false;
-
-            const checkAllInitialLoaded = () => {
-                if (initialOptionsLoaded && initialSubmissionsLoaded) {
-                    console.log("Initial data loaded. Hiding loading overlay.");
-                    window.toggleLoading(false);
-                }
-            };
 
             const optionsDocRef = doc(window.db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
             console.log("Setting up options listener...");
             onSnapshot(optionsDocRef, (docSnap) => {
                 console.log("Options snapshot received.");
-                if (docSnap.exists()) {
-                    const data = docSnap.data();
-                    const newOptions = data.options || [];
-                    if (JSON.stringify(newOptions) !== JSON.stringify(window.OPTIONS)) {
-                        window.OPTIONS = newOptions;
-                        console.log("Options updated from Firestore:", window.OPTIONS);
-                        window.renderOptionInputFields();
-                        window.initializeRankingInputs();
-                        window.renderGroupRanking();
-                        window.renderAllSubmissions();
-                    }
-                } else {
-                    window.OPTIONS = [];
+                const newOptions = docSnap.exists() ? (docSnap.data().options || []) : [];
+                if (JSON.stringify(newOptions) !== JSON.stringify(window.OPTIONS)) {
+                    window.OPTIONS = newOptions;
+                    console.log("Options updated from Firestore:", window.OPTIONS);
                     window.renderOptionInputFields();
                     window.initializeRankingInputs();
                     window.renderGroupRanking();
                     window.renderAllSubmissions();
-                    console.log("No options document found in Firestore. Initializing empty.");
                 }
-                initialOptionsLoaded = true;
-                checkAllInitialLoaded();
             }, (error) => {
                 console.error("Error listening to options:", error);
                 showMessage("Failed to load options in real-time.", 5000);
-                initialOptionsLoaded = true;
-                checkAllInitialLoaded();
             });
 
             const submissionsColRef = collection(window.db, `artifacts/${appId}/public/data/ranking_submissions`);
@@ -311,23 +290,14 @@
                     window.renderGroupRanking();
                     window.renderAllSubmissions();
                 }
-                initialSubmissionsLoaded = true;
-                checkAllInitialLoaded();
             }, (error) => {
                 console.error("Error listening to submissions:", error);
                 showMessage("Failed to load submissions in real-time.", 5000);
-                initialSubmissionsLoaded = true;
-                checkAllInitialLoaded();
             });
         }
 
         // Expose functions to the global scope for access from the main script
         window.appId = appId;
-        window.initializeFirebase = initializeFirebase;
-        window.db = db;
-        window.auth = auth;
-        window.currentUserId = currentUserId;
-        window.isAuthReady = isAuthReady;
 
         function showMessage(message, duration = 3000) {
             if (messageBox) {
@@ -372,10 +342,6 @@
         };
 
         async function setOptionsFromInput() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
             window.toggleLoading(true);
             try {
                 const newOptions = [];
@@ -414,10 +380,6 @@
         }
 
         async function clearAllSubmissions() {
-             if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
             window.toggleLoading(true);
             try {
                 const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
@@ -443,10 +405,6 @@
          * Archives the current options and submissions, then resets the session.
          */
         async function archiveAndReset() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
-                return;
-            }
             window.toggleLoading(true);
 
             const companyName = companyNameInput.value.trim();
@@ -616,18 +574,13 @@
         };
 
         async function handleSubmitRanks() {
-            if (!window.isAuthReady) {
-                showMessage("Application is still loading. Please wait.", 3000);
+            const participantName = participantNameInput.value.trim();
+            if (!participantName) {
+                showMessage("Please enter your name.");
                 return;
             }
             if (window.OPTIONS.length === 0) {
                 showMessage("Please define options in the 'Define Ranking Options' section first.");
-                return;
-            }
-
-            const participantName = participantNameInput.value.trim();
-            if (!participantName) {
-                showMessage("Please enter your name.");
                 return;
             }
 
@@ -776,18 +729,16 @@
 
             window.toggleLoading(true);
             try {
+                // Initialize Firebase and wait for authentication to complete
                 await initializeFirebase();
+                // Once authenticated, set up the real-time listeners and other UI elements
+                setupFirestoreListeners();
             } catch (error) {
                 console.error("Application startup failed:", error);
                 showMessage("Application startup failed. Please check your browser console for details.", 5000);
             } finally {
-                // A failsafe to hide the loading overlay. The Firestore listeners should hide it normally.
-                setTimeout(() => {
-                    if (loadingOverlay && loadingOverlay.classList.contains('show')) {
-                        console.log("Forcing loading overlay to hide after 5 seconds.");
-                        window.toggleLoading(false);
-                    }
-                }, 5000);
+                // This is the fix: Ensure the loading overlay is hidden regardless of success or failure.
+                window.toggleLoading(false);
             }
         };
     </script>
