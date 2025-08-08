@@ -178,14 +178,14 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, addDoc, onSnapshot, collection, query, where, getDocs, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, where, getDocs, deleteDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Global variables for Firebase instances
+        // Global variables for Firebase instances and state
         window.firebaseApp = null;
         window.db = null;
         window.auth = null;
         window.currentUserId = null;
-        window.isAuthReady = false; // Flag to indicate auth state is determined
+        window.isAuthReady = false;
         window.OPTIONS = [];
         const MAX_OPTIONS = 15;
         window.allSubmissions = [];
@@ -198,66 +198,80 @@
         let loadingOverlay, optionsInputFieldsDiv, setOptionsBtn, participantNameInput, rankingInputsDiv, submitRanksBtn, resultsTableBody, submissionsTableHead, submissionsTableBody, messageBox, printResultsBtn, downloadHtmlBtn, companyNameInput, archiveAndResetBtn, authStatusDiv;
 
         /**
-         * Initializes Firebase and sets up authentication listener.
+         * Initializes Firebase app and services.
+         * Returns a promise that resolves once authentication is fully ready.
          */
-        function initializeFirebase() {
+        async function initializeAndAuthenticateFirebase() {
             try {
-                console.log("Attempting to initialize Firebase app...");
+                if (authStatusDiv) {
+                    authStatusDiv.innerHTML = `<span style="color: #4c51bf;">Initializing Firebase...</span>`;
+                }
+
                 window.firebaseApp = initializeApp(firebaseConfig);
                 window.db = getFirestore(window.firebaseApp);
                 window.auth = getAuth(window.firebaseApp);
 
-                if (authStatusDiv) {
-                    authStatusDiv.innerHTML = `<span style="color: #6366f1;">Authenticating...</span>`;
-                }
-                
-                // Set up the authentication listener
-                onAuthStateChanged(window.auth, async (user) => {
-                    if (user) {
-                        window.currentUserId = user.uid;
-                        if (authStatusDiv) {
-                            authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
-                        }
-                        console.log("Firebase Auth Ready. User ID:", window.currentUserId);
-                    } else {
-                         // Sign in anonymously if no user is found
-                        try {
-                            if (initialAuthToken) {
-                                console.log("No user found. Signing in with custom token.");
-                                await signInWithCustomToken(window.auth, initialAuthToken);
-                            } else {
-                                console.log("No user found. Signing in anonymously.");
-                                await signInAnonymously(window.auth);
-                            }
-                        } catch (error) {
-                            console.error("Error during anonymous/custom sign-in:", error);
+                // Return a new Promise that resolves when the auth state is confirmed
+                return new Promise((resolve, reject) => {
+                    const unsubscribe = onAuthStateChanged(window.auth, async (user) => {
+                        // Unsubscribe immediately to prevent this listener from firing again
+                        // after the initial authentication.
+                        unsubscribe();
+
+                        if (user) {
+                            window.currentUserId = user.uid;
                             if (authStatusDiv) {
-                                authStatusDiv.innerHTML = `<span style="color: #ef4444;">Authentication failed. Please refresh the page.</span>`;
-                            }
-                        }
-                        window.currentUserId = window.auth.currentUser ? window.auth.currentUser.uid : null;
-                        if (window.currentUserId) {
-                             if (authStatusDiv) {
                                 authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
                             }
+                            window.isAuthReady = true;
+                            console.log("Firebase Auth Ready. User ID:", window.currentUserId);
+                            resolve();
                         } else {
-                             if (authStatusDiv) {
-                                authStatusDiv.innerHTML = `<span style="color: #ef4444;">Authentication failed. Please refresh the page.</span>`;
+                            // If no user, attempt to sign in
+                            try {
+                                if (initialAuthToken) {
+                                    if (authStatusDiv) {
+                                        authStatusDiv.innerHTML = `<span style="color: #6366f1;">Authenticating with custom token...</span>`;
+                                    }
+                                    await signInWithCustomToken(window.auth, initialAuthToken);
+                                } else {
+                                    if (authStatusDiv) {
+                                        authStatusDiv.innerHTML = `<span style="color: #6366f1;">Authenticating anonymously...</span>`;
+                                    }
+                                    await signInAnonymously(window.auth);
+                                }
+                                // Check again after sign-in attempt
+                                if (window.auth.currentUser) {
+                                    window.currentUserId = window.auth.currentUser.uid;
+                                     if (authStatusDiv) {
+                                        authStatusDiv.innerHTML = `✅ Logged in with User ID: <strong>${window.currentUserId}</strong>`;
+                                    }
+                                    window.isAuthReady = true;
+                                    console.log("Firebase Auth Ready. User ID:", window.currentUserId);
+                                    resolve();
+                                } else {
+                                    throw new Error("Authentication failed after sign-in attempt.");
+                                }
+                            } catch (error) {
+                                console.error("Error during authentication:", error);
+                                if (authStatusDiv) {
+                                    authStatusDiv.innerHTML = `<span style="color: #ef4444;">❌ Authentication failed. Please refresh.</span>`;
+                                }
+                                showMessage("Authentication failed. Please refresh the page.", 10000);
+                                window.isAuthReady = false;
+                                reject(error);
                             }
                         }
-                    }
-
-                    // Now that auth state is determined, set the flag and set up listeners
-                    window.isAuthReady = true;
-                    setupFirestoreListeners();
+                    });
                 });
-
             } catch (error) {
-                console.error("Error initializing Firebase:", error);
-                if (authStatusDiv) {
-                    authStatusDiv.innerHTML = `<span style="color: #ef4444;">Failed to initialize Firebase. Some features may not work.</span>`;
+                console.error("Critical error initializing Firebase:", error);
+                 if (authStatusDiv) {
+                    authStatusDiv.innerHTML = `<span style="color: #ef4444;">❌ Critical Firebase error.</span>`;
                 }
-                showMessage("Failed to initialize Firebase. Some features may not work.", 5000);
+                showMessage("A critical error occurred. Some features will not work.", 10000);
+                window.isAuthReady = false;
+                throw error;
             }
         }
 
@@ -270,11 +284,10 @@
                 console.warn("Firestore or authentication not ready. Skipping listeners setup.");
                 return;
             }
+            console.log("Setting up Firestore listeners...");
 
             const optionsDocRef = doc(window.db, `artifacts/${appId}/public/data/ranking_options`, 'current_options');
-            console.log("Setting up options listener...");
             onSnapshot(optionsDocRef, (docSnap) => {
-                console.log("Options snapshot received.");
                 const newOptions = docSnap.exists() ? (docSnap.data().options || []) : [];
                 if (JSON.stringify(newOptions) !== JSON.stringify(window.OPTIONS)) {
                     window.OPTIONS = newOptions;
@@ -289,9 +302,7 @@
             });
 
             const submissionsColRef = collection(window.db, `artifacts/${appId}/public/data/ranking_submissions`);
-            console.log("Setting up submissions listener...");
             onSnapshot(submissionsColRef, (snapshot) => {
-                console.log("Submissions snapshot received.");
                 const newSubmissions = [];
                 snapshot.forEach(doc => {
                     newSubmissions.push({ id: doc.id, ...doc.data() });
@@ -348,8 +359,8 @@
         };
 
         async function setOptionsFromInput() {
-            if (!window.isAuthReady || !window.db) {
-                showMessage("Application not ready. Please wait for Firebase to initialize.", 5000);
+            if (!window.isAuthReady) {
+                showMessage("App is still loading or authentication failed. Please wait a moment or refresh the page.", 5000);
                 return;
             }
             window.toggleLoading(true);
@@ -388,8 +399,8 @@
         }
 
         async function clearAllSubmissions() {
-            if (!window.isAuthReady || !window.db) {
-                showMessage("Application not ready. Please wait for Firebase to initialize.", 5000);
+             if (!window.isAuthReady) {
+                showMessage("App is still loading or authentication failed. Please wait a moment or refresh the page.", 5000);
                 return;
             }
             window.toggleLoading(true);
@@ -417,8 +428,8 @@
          * Archives the current options and submissions, then resets the session.
          */
         async function archiveAndReset() {
-            if (!window.isAuthReady || !window.db) {
-                showMessage("Application not ready. Please wait for Firebase to initialize.", 5000);
+             if (!window.isAuthReady) {
+                showMessage("App is still loading or authentication failed. Please wait a moment or refresh the page.", 5000);
                 return;
             }
             window.toggleLoading(true);
@@ -432,19 +443,16 @@
 
             try {
                 await runTransaction(window.db, async (transaction) => {
-                    // Get current options and submissions
                     const optionsDocRef = doc(window.db, `artifacts/${window.appId}/public/data/ranking_options`, 'current_options');
                     const optionsSnap = await transaction.get(optionsDocRef);
                     const submissionsColRef = collection(window.db, `artifacts/${window.appId}/public/data/ranking_submissions`);
                     const submissionsSnap = await getDocs(submissionsColRef);
 
-                    // Check for existing data
                     if (!optionsSnap.exists() && submissionsSnap.empty) {
                         showMessage("There is no data to archive. Resetting session...", 3000);
                         return;
                     }
 
-                    // Archive the data
                     const archiveSessionId = companyName + '_' + new Date().getTime();
                     const archiveDocRef = doc(window.db, `artifacts/${window.appId}/public/data/archived_sessions`, archiveSessionId);
 
@@ -455,13 +463,11 @@
                     };
                     transaction.set(archiveDocRef, archivedData);
 
-                    // Archive submissions as a subcollection
                     const archivedSubmissionsColRef = collection(archiveDocRef, 'submissions');
                     submissionsSnap.forEach(submissionDoc => {
                         transaction.set(doc(archivedSubmissionsColRef, submissionDoc.id), submissionDoc.data());
                     });
 
-                    // Clear active session data
                     transaction.set(optionsDocRef, { options: [] });
                     submissionsSnap.forEach(submissionDoc => {
                         transaction.delete(submissionDoc.ref);
@@ -469,7 +475,7 @@
                 });
 
                 showMessage(`Results for '${companyName}' have been archived and the session has been reset!`);
-                if (companyNameInput) companyNameInput.value = ''; // Clear the input field for the next session
+                if (companyNameInput) companyNameInput.value = '';
 
             } catch (e) {
                 console.error("Transaction failed: ", e);
@@ -590,8 +596,8 @@
         };
 
         async function handleSubmitRanks() {
-            if (!window.isAuthReady || !window.db) {
-                showMessage("Application not ready. Please wait for Firebase to initialize.", 5000);
+            if (!window.isAuthReady) {
+                showMessage("App is still loading or authentication failed. Please wait a moment or refresh the page.", 5000);
                 return;
             }
             const participantName = participantNameInput.value.trim();
@@ -720,7 +726,7 @@
         }
 
         // Initial setup on page load
-        window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('DOMContentLoaded', async () => {
             // Get references to DOM elements now that the page is fully loaded
             loadingOverlay = document.getElementById('loadingOverlay');
             optionsInputFieldsDiv = document.getElementById('optionsInputFields');
@@ -753,9 +759,16 @@
             if (downloadHtmlBtn) downloadHtmlBtn.addEventListener('click', downloadHTMLResults);
             if (archiveAndResetBtn) archiveAndResetBtn.addEventListener('click', archiveAndReset);
 
-            // Initialize Firebase. This function now sets up the auth listener
-            // which will handle the rest of the application setup once auth is ready.
-            initializeFirebase();
+            // Initialize Firebase. We use 'await' to ensure this process is complete
+            // before trying to set up the data listeners.
+            try {
+                await initializeAndAuthenticateFirebase();
+                if (window.isAuthReady) {
+                    setupFirestoreListeners();
+                }
+            } catch (error) {
+                console.error("Application failed to start due to authentication error.", error);
+            }
         });
     </script>
 </head>
